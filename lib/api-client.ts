@@ -1,8 +1,14 @@
 /**
  * API Client - Frontend to FastAPI Backend Communication
+ *
+ * In production (Vercel) all requests go to /api/backend which Vercel rewrites
+ * to the Cloud Run URL (set in vercel.json or NEXT_PUBLIC_API_URL env var).
+ * In local dev Next.js rewrites /api/backend/* to http://localhost:8000/*.
  */
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL
+  ? `${process.env.NEXT_PUBLIC_API_URL}`   // direct URL (e.g. during server-side calls)
+  : '/api/backend';                          // relative — goes through the Next.js rewrite proxy
 
 export interface ProcessMatch {
   image_id: string;
