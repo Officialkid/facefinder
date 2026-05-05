@@ -32,6 +32,15 @@ yarn-error.log*
 .venv/
 .venv*/
 
+# python/cache artifacts
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# runtime temp artifacts
+backend/temp/
+backend/backend/temp/
+
 # vercel
 .vercel
 
