@@ -1,0 +1,19 @@
+# Flask Backend Dependencies
+flask==3.0.0
+flask-cors==4.0.0
+werkzeug==3.0.1
+
+# AI/CV Dependencies (from existing requirements.txt)
+insightface==0.7.3
+opencv-python==4.8.1.78
+numpy==1.24.3
+onnxruntime==1.16.3
+
+# Optional: GPU support
+# onnxruntime-gpu==1.16.3
+
+# Production server
+waitress==2.1.2
+
+# Dataset adapters (free)
+gdown==5.2.0

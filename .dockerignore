@@ -1,0 +1,28 @@
+# Git and editor
+.git
+.gitignore
+.vscode
+
+# Node and frontend build artifacts
+node_modules
+.next
+out
+
+# Python artifacts
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.venv
+.venv311
+
+# Temporary/runtime data
+temp
+backend/temp
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Local docs/logs
+*.log
