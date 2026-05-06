@@ -1,15 +1,18 @@
 'use client'
 
-import { ButtonHTMLAttributes, forwardRef, useState } from 'react'
+import { type ComponentPropsWithoutRef, forwardRef, type MouseEvent, type ReactNode, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { buttonPress, ripple } from '@/lib/animations'
+import { buttonPress, ripple as rippleVariants } from '@/lib/animations'
 
-interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+type MotionButtonProps = ComponentPropsWithoutRef<typeof motion.button>
+
+interface ButtonProps extends Omit<MotionButtonProps, 'children'> {
   variant?: 'primary' | 'secondary' | 'accent' | 'ghost'
   size?: 'sm' | 'md' | 'lg'
   isLoading?: boolean
-  icon?: React.ReactNode
+  icon?: ReactNode
   showRipple?: boolean
+  children?: ReactNode
 }
 
 interface RippleType {
@@ -48,7 +51,7 @@ const ButtonEnhanced = forwardRef<HTMLButtonElement, ButtonProps>(
       lg: 'px-6 py-3.5 text-lg gap-2.5'
     }
 
-    const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => {
+    const handleClick = (e: MouseEvent<HTMLButtonElement>) => {
       if (showRipple && !disabled && !isLoading) {
         const rect = e.currentTarget.getBoundingClientRect()
         const x = e.clientX - rect.left
@@ -83,7 +86,7 @@ const ButtonEnhanced = forwardRef<HTMLButtonElement, ButtonProps>(
           {ripples.map((ripple) => (
             <motion.span
               key={ripple.id}
-              variants={ripple}
+              variants={rippleVariants}
               initial="initial"
               animate="animate"
               exit={{ opacity: 0 }}

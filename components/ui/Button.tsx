@@ -1,13 +1,16 @@
 'use client'
 
-import { ButtonHTMLAttributes, forwardRef } from 'react'
+import { type ComponentPropsWithoutRef, forwardRef, type ReactNode } from 'react'
 import { motion } from 'framer-motion'
 
-interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+type MotionButtonProps = ComponentPropsWithoutRef<typeof motion.button>
+
+interface ButtonProps extends Omit<MotionButtonProps, 'children'> {
   variant?: 'primary' | 'secondary' | 'accent' | 'ghost'
   size?: 'sm' | 'md' | 'lg'
   isLoading?: boolean
-  icon?: React.ReactNode
+  icon?: ReactNode
+  children?: ReactNode
 }
 
 const Button = forwardRef<HTMLButtonElement, ButtonProps>(

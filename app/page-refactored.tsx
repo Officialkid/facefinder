@@ -6,11 +6,11 @@ import { generateId } from '@/lib/utils'
 import { useToast } from '@/lib/useToast'
 
 import Header from '@/components/Header'
-import UploadZone from '@/components/features/UploadZone'
-import LinkInput from '@/components/features/LinkInput'
-import FindButton from '@/components/features/FindButton'
-import ProcessingState from '@/components/features/ProcessingState'
-import ResultsGrid from '@/components/features/ResultsGrid'
+import UploadZone from '@/features/UploadZone'
+import LinkInput from '@/features/LinkInput'
+import FindButton from '@/features/FindButton'
+import ProcessingState from '@/features/ProcessingState'
+import ResultsGrid from '@/features/ResultsGrid'
 import ToastNotification from '@/components/ui/ToastNotification'
 
 export default function Home() {
