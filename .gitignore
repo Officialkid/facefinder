@@ -29,6 +29,7 @@ yarn-error.log*
 .env*.local
 .env.github.secrets
 .env.github.secrets.*
+!.env.github.secrets.example
 
 # python virtual environments
 .venv/
