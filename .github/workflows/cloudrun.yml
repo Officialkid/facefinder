@@ -13,14 +13,14 @@ jobs:
       id-token: write
 
     env:
-      PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
-      REGION: ${{ secrets.GCP_REGION }}
-      SERVICE_NAME: ${{ secrets.CLOUD_RUN_SERVICE }}
-      REPOSITORY: ${{ secrets.GAR_REPOSITORY }}
+      PROJECT_ID: ${{ secrets.GCP_PROJECT_ID != '' && secrets.GCP_PROJECT_ID || 'facefinder-prod' }}
+      REGION: ${{ secrets.GCP_REGION != '' && secrets.GCP_REGION || 'us-central1' }}
+      SERVICE_NAME: ${{ secrets.CLOUD_RUN_SERVICE != '' && secrets.CLOUD_RUN_SERVICE || 'facefinder-api' }}
+      REPOSITORY: ${{ secrets.GAR_REPOSITORY != '' && secrets.GAR_REPOSITORY || 'facefinder' }}
       IMAGE_NAME: facefinder-backend
-      CLOUD_RUN_DEPLOY: ${{ secrets.CLOUD_RUN_DEPLOY }}
-      GCP_WORKLOAD_IDENTITY_PROVIDER: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-      GCP_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+      CLOUD_RUN_DEPLOY: ${{ secrets.CLOUD_RUN_DEPLOY != '' && secrets.CLOUD_RUN_DEPLOY || 'true' }}
+      GCP_WORKLOAD_IDENTITY_PROVIDER: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER != '' && secrets.GCP_WORKLOAD_IDENTITY_PROVIDER || 'projects/385300455062/locations/global/workloadIdentityPools/github-pool/providers/github-provider' }}
+      GCP_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT != '' && secrets.GCP_SERVICE_ACCOUNT || 'github-deployer@facefinder-prod.iam.gserviceaccount.com' }}
       GCP_CREDENTIALS_JSON: ${{ secrets.GCP_CREDENTIALS_JSON }}
 
     steps:
