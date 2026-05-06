@@ -102,6 +102,34 @@ This repo now includes:
 - `VERCEL_ORG_ID`
 - `VERCEL_PROJECT_ID`
 
+### Bulk upload GitHub secrets from one local file
+
+If you prefer managing one local file instead of clicking secrets one by one:
+
+1. Copy `.env.github.secrets.example` to `.env.github.secrets` and fill real values.
+2. Install GitHub CLI and login:
+
+```bash
+winget install --id GitHub.cli
+gh auth login
+```
+
+3. Run the uploader script:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\upload-github-secrets.ps1
+```
+
+Optional dry run:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\upload-github-secrets.ps1 -DryRun
+```
+
+Notes:
+- `.env.github.secrets` is gitignored and should never be committed.
+- For `GCP_CREDENTIALS_JSON`, you can reference a local file path using `@` prefix.
+
 ---
 
 ## 4) Stateless Privacy Compliance
