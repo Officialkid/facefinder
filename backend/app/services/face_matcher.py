@@ -50,32 +50,76 @@ class FaceMatcher:
         return crops
 
     def embedding_for_largest_face(self, image_path: str) -> Optional[np.ndarray]:
+        # Prefer DeepFace end-to-end: try its OpenCV detector first (better than
+        # raw Haar cascade), then fall back to "skip" (embeds whole image) so
+        # that partially-obscured or tilted faces still produce an embedding.
+        if self._deepface_ready and self._deepface is not None:
+            for backend in ("opencv", "skip"):
+                try:
+                    rep = self._deepface.represent(
+                        img_path=image_path,
+                        model_name=self.model_name,
+                        detector_backend=backend,
+                        enforce_detection=(backend != "skip"),
+                    )
+                    if rep:
+                        vector = np.asarray(rep[0]["embedding"], dtype=np.float32)
+                        norm = float(np.linalg.norm(vector))
+                        if norm > 1e-12:
+                            return vector / norm
+                except Exception:
+                    continue
+
+        # Pure-OpenCV fallback when DeepFace is unavailable.
         image = cv2.imread(image_path)
         if image is None:
             return None
 
         faces = self.detect_faces(image)
         if not faces:
-            return None
+            # Last resort: embed the whole image so a result is always produced.
+            return self._to_embedding(image)
 
         faces.sort(key=lambda f: f.shape[0] * f.shape[1], reverse=True)
         return self._to_embedding(faces[0])
 
     def best_match_for_image(self, reference_embedding: np.ndarray, image_path: str, threshold: float) -> Optional[FaceMatchCandidate]:
-        image = cv2.imread(image_path)
-        if image is None:
-            return None
+        # Try DeepFace detection first; fall back to Haar cascade.
+        candidate_embeddings: List[np.ndarray] = []
+        if self._deepface_ready and self._deepface is not None:
+            for backend in ("opencv", "skip"):
+                try:
+                    reps = self._deepface.represent(
+                        img_path=image_path,
+                        model_name=self.model_name,
+                        detector_backend=backend,
+                        enforce_detection=(backend != "skip"),
+                    )
+                    for r in (reps or []):
+                        v = np.asarray(r["embedding"], dtype=np.float32)
+                        n = float(np.linalg.norm(v))
+                        if n > 1e-12:
+                            candidate_embeddings.append(v / n)
+                    if candidate_embeddings:
+                        break
+                except Exception:
+                    continue
 
-        faces = self.detect_faces(image)
-        if not faces:
+        if not candidate_embeddings:
+            image = cv2.imread(image_path)
+            if image is None:
+                return None
+            for face in self.detect_faces(image):
+                emb = self._to_embedding(face)
+                if emb is not None:
+                    candidate_embeddings.append(emb)
+
+        if not candidate_embeddings:
             return None
 
         best_conf = 0.0
         matched = 0
-        for face in faces:
-            emb = self._to_embedding(face)
-            if emb is None:
-                continue
+        for emb in candidate_embeddings:
             conf = self.similarity(reference_embedding, emb)
             if conf >= threshold:
                 matched += 1
