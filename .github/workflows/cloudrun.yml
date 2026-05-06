@@ -28,6 +28,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Validate auth configuration
+        id: validate_auth
         run: |
           if [ -n "${{ env.GCP_CREDENTIALS_JSON }}" ] && [ -n "${{ env.GCP_WORKLOAD_IDENTITY_PROVIDER }}" ]; then
             echo "Error: Set only one auth method: either GCP_CREDENTIALS_JSON OR (GCP_WORKLOAD_IDENTITY_PROVIDER + GCP_SERVICE_ACCOUNT)."
@@ -36,10 +37,20 @@ jobs:
 
           if [ -n "${{ env.GCP_CREDENTIALS_JSON }}" ]; then
             echo "Using credentials_json authentication."
+            echo "workload_identity_provider=" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
           if [ -n "${{ env.GCP_WORKLOAD_IDENTITY_PROVIDER }}" ] && [ -n "${{ env.GCP_SERVICE_ACCOUNT }}" ]; then
+            provider="${{ env.GCP_WORKLOAD_IDENTITY_PROVIDER }}"
+            provider="${provider#//iam.googleapis.com/}"
+
+            if [[ ! "$provider" =~ ^projects/[0-9]+/locations/global/workloadIdentityPools/[^/]+/providers/[^/]+$ ]]; then
+              echo "Error: GCP_WORKLOAD_IDENTITY_PROVIDER must be in format 'projects/PROJECT_NUMBER/locations/global/workloadIdentityPools/POOL_ID/providers/PROVIDER_ID'."
+              exit 1
+            fi
+
+            echo "workload_identity_provider=$provider" >> "$GITHUB_OUTPUT"
             echo "Using workload identity provider authentication."
             exit 0
           fi
@@ -51,7 +62,7 @@ jobs:
         if: ${{ env.GCP_CREDENTIALS_JSON == '' }}
         uses: google-github-actions/auth@v2
         with:
-          workload_identity_provider: ${{ env.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          workload_identity_provider: ${{ steps.validate_auth.outputs.workload_identity_provider }}
           service_account: ${{ env.GCP_SERVICE_ACCOUNT }}
 
       - name: Authenticate to Google Cloud (Credentials JSON)
