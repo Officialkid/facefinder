@@ -4,14 +4,9 @@ on:
   push:
     branches: [main]
     paths:
-      - 'app/**'
-      - 'components/**'
-      - 'features/**'
-      - 'lib/**'
+      - 'image-sorter/frontend/**'
       - 'package.json'
-      - 'package-lock.json'
-      - 'next.config.js'
-      - 'tsconfig.json'
+      - 'vercel.json'
   workflow_dispatch:
 
 jobs:
@@ -26,6 +21,9 @@ jobs:
         with:
           node-version: '20'
 
+      - name: Install frontend dependencies
+        run: npm --prefix image-sorter/frontend ci
+
       - name: Install Vercel CLI
         run: npm i -g vercel
 
@@ -37,6 +35,8 @@ jobs:
 
       - name: Build
         run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
+        working-directory: image-sorter/frontend
 
       - name: Deploy
         run: vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}
+        working-directory: image-sorter/frontend

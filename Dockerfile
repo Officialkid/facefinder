@@ -17,13 +17,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-COPY backend/requirements.txt /app/backend/requirements.txt
-RUN python -m pip install --upgrade pip && pip install -r /app/backend/requirements.txt
+COPY image-sorter/backend/requirements.txt /app/image-sorter/backend/requirements.txt
+RUN python -m pip install --upgrade pip && pip install -r /app/image-sorter/backend/requirements.txt
 
-COPY backend /app/backend
+COPY image-sorter/backend /app/image-sorter/backend
 
-WORKDIR /app/backend
+WORKDIR /app/image-sorter/backend
 
 EXPOSE 8000
 
-CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 1"]
+CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 1"]

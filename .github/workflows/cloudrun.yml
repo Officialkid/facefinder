@@ -1,4 +1,4 @@
-name: Build and Deploy FaceFinder
+name: Build and Deploy FaceFinder AI Backend
 
 on:
   push:
@@ -15,9 +15,9 @@ jobs:
     env:
       PROJECT_ID: ${{ secrets.GCP_PROJECT_ID != '' && secrets.GCP_PROJECT_ID || 'facefinder-prod' }}
       REGION: ${{ secrets.GCP_REGION != '' && secrets.GCP_REGION || 'us-central1' }}
-      SERVICE_NAME: ${{ secrets.CLOUD_RUN_SERVICE != '' && secrets.CLOUD_RUN_SERVICE || 'facefinder-api' }}
-      REPOSITORY: ${{ secrets.GAR_REPOSITORY != '' && secrets.GAR_REPOSITORY || 'facefinder' }}
-      IMAGE_NAME: facefinder-backend
+      SERVICE_NAME: ${{ secrets.CLOUD_RUN_SERVICE != '' && secrets.CLOUD_RUN_SERVICE || 'image-sorter-api' }}
+      REPOSITORY: ${{ secrets.GAR_REPOSITORY != '' && secrets.GAR_REPOSITORY || 'image-sorter' }}
+      IMAGE_NAME: image-sorter-backend
       CLOUD_RUN_DEPLOY: ${{ secrets.CLOUD_RUN_DEPLOY != '' && secrets.CLOUD_RUN_DEPLOY || 'true' }}
       GCP_WORKLOAD_IDENTITY_PROVIDER: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER != '' && secrets.GCP_WORKLOAD_IDENTITY_PROVIDER || 'projects/385300455062/locations/global/workloadIdentityPools/github-pool/providers/github-provider' }}
       GCP_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT != '' && secrets.GCP_SERVICE_ACCOUNT || 'github-deployer@facefinder-prod.iam.gserviceaccount.com' }}

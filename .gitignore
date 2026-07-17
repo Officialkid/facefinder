@@ -43,9 +43,15 @@ __pycache__/
 # runtime temp artifacts
 backend/temp/
 backend/backend/temp/
+image-sorter/backend/temp_storage/
+image-sorter/frontend/build.log
+image-sorter/frontend/build.err
+image-sorter/frontend/.next/
+image-sorter/frontend/.tmp-imagesorter*.log
 
 # vercel
 .vercel
+.gcloud/
 
 # typescript
 *.tsbuildinfo

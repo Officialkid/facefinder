@@ -1,162 +1,64 @@
-# FaceFinder - Production-Grade AI Interface
+# FaceFinder AI Workspace
 
-A modern, non-generic facial recognition search interface built with Next.js, TypeScript, and Tailwind CSS.
+This repository now centers on `FaceFinder AI` as the single active product.
 
-## 🎨 Design Features
+Active application paths:
 
-- **Unique Aesthetic**: Avoids generic SaaS patterns with custom color palette (Deep Indigo + Coral)
-- **Advanced Typography**: Newsreader (display) + Inter (UI) pairing
-- **Micro-interactions**: Subtle animations, hover states, and transitions
-- **Mobile-First**: Fully responsive design optimized for all devices
-- **Advanced Layout**: Depth, layering, and strategic spacing
+- Frontend: `image-sorter/frontend`
+- Backend: `image-sorter/backend`
 
-## 🚀 Tech Stack
+## What FaceFinder AI Does
 
-- **Next.js 14** - React framework with App Router
-- **TypeScript** - Type safety
-- **Tailwind CSS** - Utility-first styling with custom design tokens
-- **Framer Motion** - Smooth animations and transitions
-- **Google Fonts** - Newsreader, Inter, JetBrains Mono
+FaceFinder AI lets a user:
 
-## 📦 Installation
+- upload one reference face photo
+- provide a public dataset source
+- track real processing progress while the scan is running
+- review ranked match results with richer metadata
 
-```bash
-# Install dependencies
-npm install
+Supported dataset-source flows in the current backend:
 
-# Run development server
-npm run dev
+- Google Photos public gallery links
+- Pixieset public gallery links
+- Pixabay public gallery links
+- Google Drive file links
+- Dropbox direct-download links
+- public ZIP links
+- direct public image URLs
 
-# Build for production
+## Local Verification
+
+Frontend production build:
+
+```powershell
 npm run build
-
-# Start production server
-npm start
 ```
 
-Open [http://localhost:3000](http://localhost:3000) to view the app.
+Backend test suite:
 
-## 🎯 Features
-
-### Components
-
-1. **Header** - Sticky navigation with gradient logo and blur effect
-2. **UploadZone** - Drag & drop with preview and validation
-3. **LinkInput** - Real-time URL validation with visual feedback
-4. **CTAButton** - Animated button with shimmer effect when ready
-5. **ProcessingState** - Multi-phase progress with contextual messaging
-6. **ResultsGrid** - Staggered animations with confidence badges
-
-### User Flow
-
-1. Upload photo (drag & drop or click)
-2. Paste dataset link (with validation)
-3. Click "Find Me" (animated CTA)
-4. Watch processing (4-phase progress)
-5. View results (sortable grid with confidence scores)
-6. Download matches (single or bulk)
-
-## 🎨 Design System
-
-### Colors
-
-- **Primary (Indigo)**: Trust, precision, intelligence
-- **Accent (Coral)**: Human warmth, approachability
-- **Neutrals (Warm Gray)**: Editorial sophistication
-
-### Typography
-
-- **Display**: Newsreader (serif) - Editorial, authoritative
-- **UI**: Inter (sans) - Clean, readable
-- **Code**: JetBrains Mono - Technical elements
-
-### Animations
-
-- Fade in / Slide up on mount
-- Hover lift effects on cards
-- Shimmer on progress bars
-- Pulse on ready states
-- Staggered grid animations
-
-## 📱 Responsive Breakpoints
-
-- **Mobile**: < 640px (1 column)
-- **Tablet**: 640px - 1024px (2 columns)
-- **Desktop**: > 1024px (3-4 columns)
-
-## 🔧 Customization
-
-Edit `tailwind.config.js` to customize:
-- Color palette
-- Font families
-- Spacing scale
-- Shadow system
-- Animation timings
-
-## 📄 File Structure
-
-```
-facefinderai/
-├── app/
-│   ├── layout.tsx          # Root layout with fonts
-│   ├── page.tsx            # Main page component
-│   └── globals.css         # Global styles
-├── components/
-│   ├── Header.tsx          # Navigation header
-│   ├── UploadZone.tsx      # File upload component
-│   ├── LinkInput.tsx       # URL input with validation
-│   ├── CTAButton.tsx       # Call-to-action button
-│   ├── ProcessingState.tsx # Loading/progress view
-│   └── ResultsGrid.tsx     # Results display
-├── tailwind.config.js      # Tailwind configuration
-├── tsconfig.json           # TypeScript configuration
-└── package.json            # Dependencies
+```powershell
+.venv\Scripts\python.exe image-sorter\backend\tests\test_session_and_status.py
 ```
 
-## 🎯 What Makes This Different
+## Deployment Shape
 
-### Avoids Generic Patterns
+- Vercel serves the frontend.
+- `/api/*` is rewritten to the deployed backend service.
+- The backend is packaged from the root `Dockerfile` and deployed separately.
 
-❌ **Not Used:**
-- Purple/blue gradients everywhere
-- Glassmorphism
-- Overly rounded corners (20px+)
-- Neon accents
-- Abstract blob shapes
-- Generic "AI-powered" badges
+## Current Status
 
-✅ **Instead:**
-- Editorial typography mix (serif + sans)
-- Coral human accent (warm, not cold)
-- Sharp, confident geometry (8-12px radius)
-- Subtle, purposeful shadows (8% opacity)
-- Clear, honest messaging
-- Forensic precision aesthetic
+Completed in this workspace:
 
-### Advanced Techniques
+- legacy Facefinder code removed
+- live processing progress/status contract improved
+- persistent session storage kept as backend truth
+- dataset download and archive handling hardened
+- Google Photos, Pixieset, and Pixabay gallery-provider support added
+- orientation and low-quality image fallback handling improved
+- frontend product name updated to `FaceFinder AI`
 
-- **Layering**: Multiple z-index levels with backdrop blur
-- **Depth**: Strategic shadows and gradients
-- **Spacing**: Consistent rhythm with 4px base unit
-- **Motion**: Purposeful animations that enhance UX
-- **Typography**: Contrasting font pairing for hierarchy
+Remaining external requirement before public deployment:
 
-## 🚀 Performance
-
-- **Optimized fonts** with `display: swap`
-- **Lazy loading** for images
-- **Framer Motion** for GPU-accelerated animations
-- **Tailwind JIT** for minimal CSS bundle
-- **TypeScript** for type safety and better DX
-
-## 📝 License
-
-MIT
-
-## 🤝 Contributing
-
-Contributions welcome! Please read the design philosophy in `DESIGN_PHILOSOPHY.md` before making changes.
-
----
-
-Built with precision and humanity 🎯
+- valid Vercel authentication on this machine
+- valid Google Cloud authentication on this machine

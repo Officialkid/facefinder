@@ -1,13 +1,17 @@
 {
-  "name": "facefinderai",
+  "name": "facefinder-ai-workspace",
   "version": "1.0.0",
-  "description": "",
+  "description": "Workspace entrypoint for the FaceFinder AI product.",
   "main": "index.js",
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "next lint"
+    "dev": "npm --prefix image-sorter/frontend run dev",
+    "build": "npm --prefix image-sorter/frontend run build",
+    "start": "npm --prefix image-sorter/frontend run start",
+    "lint": "npm --prefix image-sorter/frontend run lint",
+    "frontend:dev": "npm --prefix image-sorter/frontend run dev",
+    "frontend:build": "npm --prefix image-sorter/frontend run build",
+    "frontend:start": "npm --prefix image-sorter/frontend run start",
+    "backend:test": ".venv\\Scripts\\python.exe image-sorter\\backend\\tests\\test_session_and_status.py"
   },
   "keywords": [],
   "author": "",
