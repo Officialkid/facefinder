@@ -1,10 +1,15 @@
 """Face recognition pipeline and scan progress reporting."""
 
 import logging
+import os
 import time
 from pathlib import Path
 from typing import Callable, Optional, Tuple
 import numpy as np
+
+# Ensure TensorFlow/Keras compatibility for DeepFace
+os.environ["TF_USE_LEGACY_KERAS"] = "1"
+os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0"
 
 from app.models.schemas import ErrorCode
 
@@ -106,12 +111,22 @@ def _generate_detection_variants(image_path: str) -> list[tuple[str, np.ndarray]
 
 def _represent_variant(image: np.ndarray, model_name: str):
     DeepFace = _get_deepface()
-    return DeepFace.represent(
-        img_path=image,
-        model_name=model_name,
-        enforce_detection=True,
-        detector_backend="retinaface",
-    )
+    # Fallback across detectors for maximum detection resilience
+    detectors = ["retinaface", "opencv", "ssd", "mtcnn"]
+    last_err = None
+    for detector in detectors:
+        try:
+            return DeepFace.represent(
+                img_path=image,
+                model_name=model_name,
+                enforce_detection=True,
+                detector_backend=detector,
+            )
+        except Exception as err:
+            last_err = err
+            continue
+    if last_err:
+        raise last_err
 
 
 def detect_blur(image_path: str) -> dict:

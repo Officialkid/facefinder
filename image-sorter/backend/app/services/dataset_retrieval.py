@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import re
 import shutil
+import time
 from typing import Callable, Optional
 from urllib.error import HTTPError, URLError
 from urllib.parse import urljoin, urlparse
@@ -164,9 +165,20 @@ def _normalize_candidate_url(raw_url: str, base_url: str) -> Optional[str]:
     candidate = candidate.replace("\\/", "/").replace("&amp;", "&")
     candidate = urljoin(base_url, candidate)
 
-    # Google Photos special treatment: ensure high-resolution endpoint
+    # Filter out static UI elements, icons, avatars, banners, and video endpoints
+    lower_cand = candidate.lower()
+    if any(ignore in lower_cand for ignore in (
+        "gstatic.com", "favicon", "avatar", "logo", "/bar/", "al-icon",
+        "ogw", "photo.jpg", "aaaaaaaa", "video-downloads", ".mp4", ".mov", ".webm"
+    )):
+        return None
+
+    # Google Photos special treatment: ensure high-resolution endpoint for album photos
     if "googleusercontent.com" in candidate:
         if "/a/" in candidate or "/og/" in candidate or "/contacts/" in candidate:
+            return None
+        # Only take actual gallery image endpoints
+        if "/pw/" not in candidate and "/p/" not in candidate:
             return None
         # Normalize and strip sizing query
         base_photo_url = re.sub(r"=[^/]*$", "", candidate)
@@ -174,7 +186,7 @@ def _normalize_candidate_url(raw_url: str, base_url: str) -> Optional[str]:
 
     # Pixieset special treatment: ensure full size
     if "pxscdn.com" in candidate or "pixieset.com" in candidate:
-        if "avatar" in candidate or "logo" in candidate:
+        if "avatar" in candidate or "logo" in candidate or "watermark" in candidate:
             return None
         return candidate
 
@@ -302,7 +314,7 @@ def _safe_extract_zip(
             if total_uncompressed_size > MAX_ARCHIVE_TOTAL_SIZE_MB * 1024 * 1024:
                 raise DatasetRetrievalError(
                     ErrorCode.DATASET_TOO_LARGE,
-                    "The extracted dataset would exceed the allowed size limit.",
+                    "The extracted dataset exceeds the maximum allowable total size limit.",
                 )
 
             if member.external_attr >> 16:
@@ -313,65 +325,71 @@ def _safe_extract_zip(
                         "Dataset archive contains unsupported symbolic links.",
                     )
 
-        extracted_files = 0
-        total_files = len([member for member in members if member.filename and not member.is_dir()])
-        if progress_callback:
-            progress_callback(
-                {
-                    "stage": "dataset_extraction",
-                    "progress_percent": 22,
-                    "dataset_files_extracted": 0,
-                    "dataset_total_files": total_files,
-                    "stage_message": "Extracting dataset archive.",
-                }
-            )
-
+        extracted_count = 0
+        total_files = len(members)
         for member in members:
+            if member.is_dir():
+                continue
+
+            member_suffix = Path(member.filename).suffix.lower()
+            if member_suffix not in SUPPORTED_IMAGE_EXTENSIONS:
+                continue
+
             zf.extract(member, destination)
-            if member.filename and not member.is_dir():
-                extracted_files += 1
-                if progress_callback and total_files > 0:
-                    progress_callback(
-                        {
-                            "stage": "dataset_extraction",
-                            "progress_percent": min(28, 22 + int((extracted_files / total_files) * 6)),
-                            "dataset_files_extracted": extracted_files,
-                            "dataset_total_files": total_files,
-                            "stage_message": f"Extracted {extracted_files} of {total_files} dataset files.",
-                        }
-                    )
+            extracted_count += 1
+            if progress_callback:
+                progress_callback(
+                    {
+                        "stage": "dataset_extraction",
+                        "progress_percent": min(28, 20 + int((extracted_count / total_files) * 8)),
+                        "dataset_files_extracted": extracted_count,
+                        "dataset_total_files": total_files,
+                        "stage_message": f"Extracted {extracted_count} images from archive.",
+                    }
+                )
 
 
 def _download_to_path(
-    resolved_url: str,
-    destination: Path,
+    url: str,
+    target_path: Path,
     progress_callback: Optional[Callable[[dict], None]] = None,
     referer: Optional[str] = None,
-) -> tuple[int, Optional[int], str]:
-    req = _build_request(resolved_url, method="GET", referer=referer)
+) -> tuple[int, Optional[int], Optional[str]]:
+    req = _build_request(url, method="GET", referer=referer)
     with urllib.request.urlopen(req, timeout=DOWNLOAD_TIMEOUT_SECONDS) as response:
-        content_type = (response.headers.get("Content-Type") or "").lower()
+        content_type = response.headers.get("Content-Type")
         content_length_header = response.headers.get("Content-Length")
-        total_bytes = int(content_length_header) if content_length_header and content_length_header.isdigit() else None
+        total_bytes = None
+        if content_length_header and content_length_header.isdigit():
+            total_bytes = int(content_length_header)
+            if total_bytes > MAX_DATASET_SIZE_MB * 1024 * 1024:
+                raise DatasetRetrievalError(
+                    ErrorCode.DATASET_TOO_LARGE,
+                    f"Dataset exceeds the {MAX_DATASET_SIZE_MB}MB size limit.",
+                )
 
+        target_path.parent.mkdir(parents=True, exist_ok=True)
         downloaded_bytes = 0
-        with destination.open("wb") as handle:
+        with open(target_path, "wb") as f:
             while True:
                 chunk = response.read(DOWNLOAD_CHUNK_SIZE_BYTES)
                 if not chunk:
                     break
+
+                f.write(chunk)
                 downloaded_bytes += len(chunk)
                 if downloaded_bytes > MAX_DATASET_SIZE_MB * 1024 * 1024:
                     raise DatasetRetrievalError(
                         ErrorCode.DATASET_TOO_LARGE,
-                        f"Dataset exceeds maximum allowed size of {MAX_DATASET_SIZE_MB}MB.",
+                        f"Dataset download exceeded the {MAX_DATASET_SIZE_MB}MB size limit.",
                     )
-                handle.write(chunk)
 
                 if progress_callback:
-                    progress_percent = 10
-                    if total_bytes and total_bytes > 0:
-                        progress_percent = min(20, 10 + int((downloaded_bytes / total_bytes) * 10))
+                    progress_percent = (
+                        int((downloaded_bytes / total_bytes) * 10) + 10
+                        if total_bytes
+                        else min(20, 10 + int(downloaded_bytes / (1024 * 1024)))
+                    )
                     progress_callback(
                         {
                             "stage": "dataset_download",
@@ -426,12 +444,32 @@ def _download_gallery_dataset(
     for index, image_url in enumerate(image_urls, start=1):
         temp_path = staging_dir / f"provider-image-{index:04d}.part"
         try:
-            downloaded_bytes, _, content_type = _download_to_path(
-                image_url,
-                temp_path,
-                progress_callback=None,
-                referer=page_url,
-            )
+            # Download with retry and adaptive rate-limit handling
+            downloaded_bytes = 0
+            content_type = ""
+            for attempt in range(3):
+                try:
+                    downloaded_bytes, _, content_type = _download_to_path(
+                        image_url,
+                        temp_path,
+                        progress_callback=None,
+                        referer=page_url,
+                    )
+                    break
+                except HTTPError as http_err:
+                    if http_err.code == 429 and attempt < 2:
+                        time.sleep(1.0 * (attempt + 1))
+                        continue
+                    if attempt < 2 and http_err.code >= 500:
+                        time.sleep(0.5)
+                        continue
+                    raise
+                except Exception:
+                    if attempt < 2:
+                        time.sleep(0.5)
+                        continue
+                    raise
+
             if "image/" not in content_type and "application/octet-stream" not in content_type:
                 temp_path.unlink(missing_ok=True)
                 continue
@@ -455,8 +493,18 @@ def _download_gallery_dataset(
                         "stage_message": f"Prepared {prepared_images} of {total_images} gallery images for scanning.",
                     }
                 )
+        except Exception as exc:
+            logger.warning("Skipped gallery image %d (%s) due to error: %s", index, image_url[:60], exc)
+            temp_path.unlink(missing_ok=True)
+            continue
         finally:
             temp_path.unlink(missing_ok=True)
+
+    if prepared_images == 0:
+        raise DatasetRetrievalError(
+            ErrorCode.DATASET_EMPTY,
+            f"Could not download images from the public {provider_name} gallery. Please check that the album is publicly shared and accessible.",
+        )
 
 
 def download_dataset(
