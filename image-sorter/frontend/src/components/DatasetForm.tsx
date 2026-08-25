@@ -1,307 +1,404 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import {
-  getApiErrorMessage,
-  ImageSorterAPI,
-  RecognitionModel,
-  RECOGNITION_MODELS,
-} from "@/lib/api";
+import { useState } from "react";
+import { ImageSorterAPI, RecognitionModel } from "@/lib/api";
 
 interface Props {
   sessionId: string;
   referencePreview: string;
   onStarted: () => void;
+  onBack: () => void;
 }
 
-const MODEL_OPTIONS: Array<{ value: RecognitionModel; label: string; desc: string }> = [
-  { value: "ArcFace", label: "ArcFace", desc: "Best accuracy and the default recommendation" },
-  { value: "Facenet", label: "FaceNet", desc: "Faster for larger datasets with good quality" },
-  { value: "VGG-Face", label: "VGG-Face", desc: "Classic baseline when you want a second pass" },
-  { value: "DeepFace", label: "DeepFace", desc: "Useful as an alternate pass when recall matters" },
-];
-
-const SUPPORTED_SOURCES = [
-  "Google Photos",
-  "Pixieset",
-  "Pixabay",
-  "Google Drive",
-  "Dropbox",
-  "ZIP link",
-  "Direct image URL",
-];
-
-function getDatasetUrlState(value: string) {
-  const trimmed = value.trim();
-  if (!trimmed) {
-    return { isValid: null as boolean | null, message: "" };
-  }
-
-  try {
-    const url = new URL(trimmed);
-    if (!["http:", "https:"].includes(url.protocol)) {
-      return { isValid: false, message: "Use a public http:// or https:// dataset URL." };
-    }
-
-    const host = url.hostname.toLowerCase();
-    if (["localhost", "127.0.0.1", "0.0.0.0", "::1"].includes(host)) {
-      return { isValid: false, message: "Local or loopback dataset URLs are blocked for security." };
-    }
-
-    const suffix = url.pathname.split(".").pop()?.toLowerCase();
-    if (
-      suffix &&
-      !["zip", "jpg", "jpeg", "png", "bmp", "webp", "tiff"].includes(suffix)
-    ) {
-      return {
-        isValid: false,
-        message: "Use a ZIP archive link, direct image URL, or a supported public gallery link.",
-      };
-    }
-
-    return {
-      isValid: true,
-      message: "Dataset URL looks valid and is ready for backend provider checks.",
-    };
-  } catch {
-    return { isValid: false, message: "Enter a valid public dataset URL starting with http:// or https://." };
-  }
-}
-
-export default function DatasetForm({ sessionId, referencePreview, onStarted }: Props) {
+export default function DatasetForm({ sessionId, referencePreview, onStarted, onBack }: Props) {
   const [datasetUrl, setDatasetUrl] = useState("");
   const [threshold, setThreshold] = useState(0.4);
-  const [model, setModel] = useState<RecognitionModel>(RECOGNITION_MODELS[0]);
+  const [modelName, setModelName] = useState<RecognitionModel>("ArcFace");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [imgSrc, setImgSrc] = useState(referencePreview || ImageSorterAPI.getReferenceImageUrl(sessionId));
 
-  const urlState = useMemo(() => getDatasetUrlState(datasetUrl), [datasetUrl]);
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
 
-  const handleSubmit = async () => {
     if (!datasetUrl.trim()) {
-      setError("Please enter a dataset URL.");
+      setError("Please enter a valid dataset or album URL.");
       return;
     }
 
-    if (urlState.isValid === false) {
-      setError(urlState.message);
-      return;
-    }
-
-    setError(null);
     setLoading(true);
+    setError(null);
 
     try {
-      await ImageSorterAPI.startProcessing(sessionId, datasetUrl.trim(), threshold, model);
-      onStarted();
-    } catch (error) {
-      setError(
-        getApiErrorMessage(
-          error,
-          "Failed to start processing. Check the dataset URL and try again."
-        )
+      await ImageSorterAPI.startProcessing(
+        sessionId,
+        datasetUrl.trim(),
+        threshold,
+        modelName
       );
+      onStarted();
+    } catch (err: any) {
+      const msg = err?.response?.data?.detail ?? "Failed to initiate scan. Please verify your album URL.";
+      setError(msg);
     } finally {
       setLoading(false);
     }
   };
 
+  const similarityPercent = Math.round((1 - threshold) * 100);
+
   return (
-    <div className="space-y-6">
-      <div className="space-y-3">
-        <div className="inline-flex items-center gap-2 rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-indigo-700">
-          Step 2
-          <span className="h-1 w-1 rounded-full bg-indigo-400" />
-          Dataset Source
-        </div>
+    <form onSubmit={handleSubmit} className="w-full space-y-8">
+      {/* Main Interaction Card */}
+      <div className="w-full glass-panel rounded-2xl p-1 relative overflow-hidden group shadow-2xl">
+        {/* Inner Bevel Effect */}
+        <div className="absolute inset-0 border-t border-l border-white/20 rounded-2xl pointer-events-none" />
+        <div className="absolute inset-0 border-b border-r border-black/40 rounded-2xl pointer-events-none" />
 
-        <div>
-          <h2 className="mb-2 text-3xl font-extrabold tracking-tight text-indigo-950">
-            Point the search to your event photos
-          </h2>
-          <p className="max-w-2xl text-sm leading-6 text-gray-600">
-            Paste the public dataset link where the event photos live. The backend now accepts
-            supported gallery providers like Google Photos, Pixieset, and Pixabay alongside direct
-            ZIP or image links, while still rejecting unsafe local or private URLs.
-          </p>
-        </div>
-      </div>
+        <div className="bg-surface-container/40 rounded-xl p-6 sm:p-8 backdrop-blur-md space-y-8">
+          {/* Stepper */}
+          <div className="flex items-center justify-between mb-8 relative">
+            <div className="absolute top-1/2 left-0 w-full h-[2px] bg-surface-variant -z-10 -translate-y-1/2" />
+            <div
+              onClick={onBack}
+              title="Click to change reference portrait"
+              className="flex flex-col items-center gap-2 bg-surface-container/40 px-2 cursor-pointer group/step"
+            >
+              <div className="w-8 h-8 rounded-full bg-surface-container-high border-2 border-tertiary flex items-center justify-center text-tertiary group-hover/step:border-secondary transition-colors">
+                <span className="material-symbols-outlined text-[16px] font-bold">check</span>
+              </div>
+              <span className="font-mono text-xs text-on-surface-variant group-hover/step:text-white transition-colors flex items-center gap-0.5">
+                <span>Reference Face</span>
+                <span className="material-symbols-outlined text-[12px]">edit</span>
+              </span>
+            </div>
+            <div className="flex flex-col items-center gap-2 bg-surface-container/40 px-2">
+              <div className="w-8 h-8 rounded-full bg-surface-variant flex items-center justify-center border-2 border-secondary glow-pulse relative">
+                <div className="absolute inset-0 rounded-full bg-secondary/20 animate-ping" />
+                <span className="font-mono text-xs text-secondary font-bold z-10">2</span>
+              </div>
+              <span className="font-mono text-xs text-secondary font-semibold">Dataset Source</span>
+            </div>
+            <div className="flex flex-col items-center gap-2 bg-surface-container/40 px-2">
+              <div className="w-8 h-8 rounded-full bg-surface-variant flex items-center justify-center border border-white/10 text-on-surface-variant">
+                <span className="font-mono text-xs">3</span>
+              </div>
+              <span className="font-mono text-xs text-on-surface-variant">AI Recognition</span>
+            </div>
+            <div className="flex flex-col items-center gap-2 bg-surface-container/40 px-2">
+              <div className="w-8 h-8 rounded-full bg-surface-variant flex items-center justify-center border border-white/10 text-on-surface-variant">
+                <span className="font-mono text-xs">4</span>
+              </div>
+              <span className="font-mono text-xs text-on-surface-variant">Results</span>
+            </div>
+          </div>
 
-      <div className="flex items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
-        <div className="h-12 w-12 flex-shrink-0 overflow-hidden rounded-xl border border-emerald-200 bg-white">
-          <img src={referencePreview} alt="Reference" className="h-full w-full object-cover" />
-        </div>
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-700">
-            Reference photo locked in
-          </p>
-          <p className="text-sm text-emerald-900">
-            Session <code className="rounded bg-white/70 px-1.5 py-0.5 font-mono text-xs">{sessionId.slice(0, 8)}...</code> is ready for dataset scanning.
-          </p>
-        </div>
-        <div className="ml-auto h-2.5 w-2.5 rounded-full bg-emerald-400" />
-      </div>
+          {/* Screen Title */}
+          <div className="text-center max-w-2xl mx-auto space-y-1">
+            <h2 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
+              Configure Scan Parameters
+            </h2>
+            <p className="text-xs sm:text-sm text-on-surface-variant">
+              Define your event album source, recognition tensor model, and cosine sensitivity.
+            </p>
+          </div>
 
-      <div className="rounded-[28px] border border-gray-200 bg-white p-5 shadow-sm">
-        <div className="space-y-3">
-          <label
-            htmlFor="dataset-url"
-            className="block text-sm font-bold uppercase tracking-[0.16em] text-gray-600"
-          >
-            Album or dataset URL
-          </label>
+          {/* Error Banner */}
+          {error && (
+            <div className="p-4 rounded-xl bg-error-container/20 border border-error/40 text-error text-xs flex items-center gap-2">
+              <span className="material-symbols-outlined text-[18px]">error</span>
+              <span>{error}</span>
+            </div>
+          )}
 
-          <div
-            className={`flex items-center gap-2 rounded-2xl border p-1 transition-all ${
-              urlState.isValid === true
-                ? "border-emerald-300 bg-emerald-50/50"
-                : urlState.isValid === false
-                  ? "border-red-300 bg-red-50/60"
-                  : "border-gray-200 bg-slate-50 hover:border-indigo-300"
-            }`}
-          >
-            <div className="pl-3 text-gray-500">
-              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
-              </svg>
+          {/* Top Row: Target Profile & Target Dataset Source */}
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-5 items-stretch">
+            {/* Target Profile Card */}
+            <div className="md:col-span-4 glass-panel rounded-xl p-4 flex flex-col justify-between relative overflow-hidden bg-surface-container-low/60">
+              <div className="flex items-center justify-between mb-3">
+                <span className="font-mono text-[11px] uppercase tracking-wider text-on-surface-variant font-medium">
+                  Target Profile
+                </span>
+                <button
+                  type="button"
+                  onClick={onBack}
+                  className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-surface border border-white/10 text-secondary hover:text-white transition-colors flex items-center gap-1"
+                >
+                  <span className="material-symbols-outlined text-[12px]">cached</span>
+                  <span>Change</span>
+                </button>
+              </div>
+
+              <div className="flex items-center gap-3.5">
+                <div className="relative w-14 h-14 rounded-lg overflow-hidden border border-secondary/50 flex-shrink-0 bg-surface-container-lowest">
+                  <img
+                    src={imgSrc}
+                    onError={() => setImgSrc(ImageSorterAPI.getReferenceImageUrl(sessionId))}
+                    alt="Target Reference"
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+                <div className="min-w-0">
+                  <p className="font-mono text-[10px] text-on-surface-variant uppercase">Session ID</p>
+                  <p className="font-mono text-xs font-bold text-secondary tracking-wider truncate">
+                    {sessionId ? `FF-AI-${sessionId.slice(0, 5).toUpperCase()}` : "FF-AI-9928X"}
+                  </p>
+                  <span className="inline-flex items-center gap-1 text-[10px] font-mono text-tertiary">
+                    <span className="w-1.5 h-1.5 rounded-full bg-tertiary animate-pulse" />
+                    Biometrics Locked
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Target Dataset Source Input */}
+            <div className="md:col-span-8 glass-panel rounded-xl p-4 flex flex-col justify-between space-y-3 bg-surface-container-low/60">
+              <div className="flex items-center justify-between">
+                <label htmlFor="dataset-url" className="font-mono text-[11px] uppercase tracking-wider text-on-surface-variant font-medium">
+                  Target Dataset / Album Source URL
+                </label>
+                <span className="material-symbols-outlined text-outline text-[16px]">info</span>
+              </div>
+
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-secondary">
+                  <span className="material-symbols-outlined text-[18px]">link</span>
+                </div>
+                <input
+                  id="dataset-url"
+                  type="url"
+                  value={datasetUrl}
+                  onChange={(e) => setDatasetUrl(e.target.value)}
+                  placeholder="https://photos.app.goo.gl/... or https://client.pixieset.com/... or ZIP Link"
+                  className="w-full pl-10 pr-4 py-2.5 bg-surface-container-lowest border border-white/10 rounded-lg text-xs text-white placeholder:text-outline focus:outline-none focus:border-secondary focus:ring-1 focus:ring-secondary font-mono"
+                  required
+                />
+              </div>
+
+              {/* Supported Provider Chips */}
+              <div className="flex flex-wrap items-center gap-2 pt-1">
+                <span className="font-mono text-[10px] text-outline">Supported:</span>
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-surface border border-white/5 font-mono text-[10px] text-on-surface-variant">
+                  <span className="material-symbols-outlined text-[12px] text-secondary">photo_library</span>
+                  Google Photos
+                </span>
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-surface border border-white/5 font-mono text-[10px] text-on-surface-variant">
+                  <span className="material-symbols-outlined text-[12px] text-secondary">collections</span>
+                  Pixieset
+                </span>
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-surface border border-white/5 font-mono text-[10px] text-on-surface-variant">
+                  <span className="material-symbols-outlined text-[12px] text-primary">cloud</span>
+                  Google Drive
+                </span>
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-surface border border-white/5 font-mono text-[10px] text-on-surface-variant">
+                  <span className="material-symbols-outlined text-[12px] text-tertiary">folder_zip</span>
+                  Direct ZIP
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Recognition Engine Architecture Cards */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <label className="font-mono text-xs uppercase tracking-wider text-on-surface-variant font-medium flex items-center gap-2">
+                <span className="material-symbols-outlined text-secondary text-[16px]">psychology</span>
+                <span>Recognition Engine Architecture</span>
+              </label>
+              <span className="font-mono text-[11px] text-outline">Select Tensor Model</span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+              {/* ArcFace */}
+              <div
+                onClick={() => setModelName("ArcFace")}
+                className={`cursor-pointer rounded-xl p-4 transition-all duration-200 relative overflow-hidden border flex flex-col justify-between ${
+                  modelName === "ArcFace"
+                    ? "bg-primary-container/20 border-primary shadow-[0_0_20px_rgba(208,188,255,0.2)]"
+                    : "glass-panel bg-surface-container-low/40 border-white/10 hover:border-primary/40 hover:bg-surface-container-high/40"
+                }`}
+              >
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="font-mono text-sm font-bold text-white">ArcFace</span>
+                    <span className="px-2 py-0.5 rounded-full text-[9px] font-mono font-bold bg-primary/20 text-primary border border-primary/40">
+                      Recommended SOTA
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-on-surface-variant leading-relaxed">
+                    512-D Angular Margin Loss (99.83% LFW). Best for 95% of events: weddings, crowded stages &amp; varying poses.
+                  </p>
+                </div>
+                <div className="mt-3 pt-2 border-t border-white/5 flex items-center justify-between text-[10px] font-mono text-outline">
+                  <span>Vectors: 512</span>
+                  <span>ResNet-50</span>
+                </div>
+              </div>
+
+              {/* FaceNet */}
+              <div
+                onClick={() => setModelName("Facenet")}
+                className={`cursor-pointer rounded-xl p-4 transition-all duration-200 relative overflow-hidden border flex flex-col justify-between ${
+                  modelName === "Facenet"
+                    ? "bg-secondary-container/20 border-secondary shadow-[0_0_20px_rgba(76,215,246,0.2)]"
+                    : "glass-panel bg-surface-container-low/40 border-white/10 hover:border-secondary/40 hover:bg-surface-container-high/40"
+                }`}
+              >
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="font-mono text-sm font-bold text-white">FaceNet</span>
+                    <span className="px-2 py-0.5 rounded-full text-[9px] font-mono font-bold bg-secondary/20 text-secondary border border-secondary/40">
+                      Ultra Fast Scan
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-on-surface-variant leading-relaxed">
+                    128-D Triplet Loss. 3x faster inference. Ideal for scanning massive albums with over 1,000+ images.
+                  </p>
+                </div>
+                <div className="mt-3 pt-2 border-t border-white/5 flex items-center justify-between text-[10px] font-mono text-outline">
+                  <span>Vectors: 128</span>
+                  <span>Inception-ResNet</span>
+                </div>
+              </div>
+
+              {/* VGG-Face */}
+              <div
+                onClick={() => setModelName("VGG-Face")}
+                className={`cursor-pointer rounded-xl p-4 transition-all duration-200 relative overflow-hidden border flex flex-col justify-between ${
+                  modelName === "VGG-Face"
+                    ? "bg-tertiary-container/20 border-tertiary shadow-[0_0_20px_rgba(78,222,163,0.2)]"
+                    : "glass-panel bg-surface-container-low/40 border-white/10 hover:border-tertiary/40 hover:bg-surface-container-high/40"
+                }`}
+              >
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="font-mono text-sm font-bold text-white">VGG-Face</span>
+                    <span className="px-2 py-0.5 rounded-full text-[9px] font-mono font-bold bg-tertiary/20 text-tertiary border border-tertiary/40">
+                      Legacy Robust
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-on-surface-variant leading-relaxed">
+                    4096-D Deep CNN. Extremely robust against vintage/older photos, motion blur, and low-light venues.
+                  </p>
+                </div>
+                <div className="mt-3 pt-2 border-t border-white/5 flex items-center justify-between text-[10px] font-mono text-outline">
+                  <span>Vectors: 4096</span>
+                  <span>VGG-16</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Cosine Sensitivity Threshold Slider */}
+          <div className="glass-panel rounded-xl p-5 bg-surface-container-low/60 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <label htmlFor="sensitivity" className="font-mono text-xs uppercase tracking-wider text-on-surface-variant font-medium flex items-center gap-2">
+                <span className="material-symbols-outlined text-secondary text-[16px]">tune</span>
+                <span>Cosine Distance Threshold</span>
+              </label>
+              <div className="flex items-center gap-2 font-mono text-xs">
+                <span className="text-outline">Max Angular Distance:</span>
+                <span className="font-bold text-secondary">{threshold.toFixed(2)}</span>
+                <span className="px-2 py-0.5 rounded bg-surface border border-white/10 text-tertiary text-[11px] font-bold">
+                  {similarityPercent}% Match Cutoff
+                </span>
+              </div>
             </div>
 
             <input
-              id="dataset-url"
-              type="url"
-              value={datasetUrl}
-              onChange={(e) => setDatasetUrl(e.target.value)}
-              placeholder="https://photos.app.goo.gl/... or https://example.com/photos.zip"
-              className="flex-1 bg-transparent px-1 py-3 text-sm text-gray-800 placeholder:text-gray-400 focus:outline-none"
+              id="sensitivity"
+              type="range"
+              min="0.20"
+              max="0.65"
+              step="0.01"
+              value={threshold}
+              onChange={(e) => setThreshold(parseFloat(e.target.value))}
+              className="w-full h-2 bg-surface-container-lowest rounded-lg appearance-none cursor-pointer accent-secondary"
             />
 
-            {urlState.isValid !== null && (
-              <div className="pr-3">
-                {urlState.isValid ? (
-                  <svg className="h-5 w-5 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                  </svg>
-                ) : (
-                  <svg className="h-5 w-5 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                )}
-              </div>
-            )}
-          </div>
-
-          <p
-            className={`text-sm ${
-              urlState.isValid === false
-                ? "text-red-700"
-                : urlState.isValid === true
-                  ? "text-emerald-700"
-                  : "text-gray-500"
-            }`}
-          >
-            {urlState.message || "Use a public Google Photos, Pixieset, Pixabay, Drive, Dropbox, ZIP, or direct image link."}
-          </p>
-
-          <div className="flex flex-wrap gap-2 pt-1">
-            {SUPPORTED_SOURCES.map((source) => (
-              <span
-                key={source}
-                className="inline-flex items-center rounded-full border border-gray-200 bg-slate-50 px-3 py-1 text-xs font-medium text-gray-600"
-              >
-                {source}
-              </span>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      <div className="rounded-[28px] border border-gray-200 bg-white p-5 shadow-sm space-y-5">
-        <div>
-          <p className="text-sm font-bold uppercase tracking-[0.16em] text-gray-600">
-            Recognition model
-          </p>
-          <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
-            {MODEL_OPTIONS.map((opt) => (
+            {/* Presets with Guidance */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
               <button
-                key={opt.value}
                 type="button"
-                onClick={() => setModel(opt.value)}
-                className={`rounded-2xl border p-4 text-left transition-all ${
-                  model === opt.value
-                    ? "border-violet-500 bg-violet-50 ring-2 ring-violet-100"
-                    : "border-gray-200 bg-white hover:border-gray-300"
+                onClick={() => setThreshold(0.35)}
+                className={`p-2.5 rounded-lg text-left text-xs font-mono transition-all border ${
+                  threshold === 0.35
+                    ? "bg-secondary/15 border-secondary text-white shadow-sm"
+                    : "text-on-surface-variant hover:text-white bg-surface-container border-white/5"
                 }`}
               >
-                <p className={`text-sm font-semibold ${model === opt.value ? "text-violet-800" : "text-gray-700"}`}>
-                  {opt.label}
-                </p>
-                <p className="mt-1 text-xs leading-5 text-gray-500">{opt.desc}</p>
+                <div className="font-bold flex items-center justify-between">
+                  <span>Strict (0.35)</span>
+                  <span className="text-[10px] text-secondary">65% Cutoff</span>
+                </div>
+                <p className="text-[10px] text-outline mt-0.5">Zero false positives. Front-facing only.</p>
               </button>
-            ))}
+
+              <button
+                type="button"
+                onClick={() => setThreshold(0.4)}
+                className={`p-2.5 rounded-lg text-left text-xs font-mono transition-all border ${
+                  threshold === 0.4
+                    ? "bg-secondary/15 border-secondary text-white shadow-sm"
+                    : "text-on-surface-variant hover:text-white bg-surface-container border-white/5"
+                }`}
+              >
+                <div className="font-bold flex items-center justify-between">
+                  <span>Balanced (0.40)</span>
+                  <span className="text-[10px] text-tertiary font-bold">Recommended</span>
+                </div>
+                <p className="text-[10px] text-outline mt-0.5">Captures smiles, angled poses &amp; indoor lighting.</p>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setThreshold(0.5)}
+                className={`p-2.5 rounded-lg text-left text-xs font-mono transition-all border ${
+                  threshold === 0.5
+                    ? "bg-secondary/15 border-secondary text-white shadow-sm"
+                    : "text-on-surface-variant hover:text-white bg-surface-container border-white/5"
+                }`}
+              >
+                <div className="font-bold flex items-center justify-between">
+                  <span>Broad (0.50)</span>
+                  <span className="text-[10px] text-outline">50% Cutoff</span>
+                </div>
+                <p className="text-[10px] text-outline mt-0.5">Forgiving. Detects hats, sunglasses &amp; crowds.</p>
+              </button>
+            </div>
           </div>
-        </div>
 
-        <div>
-          <div className="mb-2 flex items-center justify-between">
-            <label className="text-sm font-bold uppercase tracking-[0.16em] text-gray-600">
-              Match sensitivity
-            </label>
-            <span className="rounded-full bg-violet-50 px-3 py-1 text-sm font-mono text-violet-700">
-              {threshold.toFixed(2)}
-            </span>
-          </div>
+          {/* Action CTA Buttons */}
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-2">
+            <button
+              type="button"
+              onClick={onBack}
+              className="w-full sm:w-auto px-5 py-3 rounded-lg bg-surface border border-white/10 hover:border-secondary/40 text-on-surface-variant hover:text-white font-mono text-xs font-semibold flex items-center justify-center gap-2 transition-all active:scale-95"
+            >
+              <span className="material-symbols-outlined text-[16px]">arrow_back</span>
+              <span>Back / Change Reference Photo</span>
+            </button>
 
-          <input
-            type="range"
-            min="0.2"
-            max="0.7"
-            step="0.05"
-            value={threshold}
-            onChange={(e) => setThreshold(parseFloat(e.target.value))}
-            className="w-full accent-violet-600"
-          />
-
-          <div className="mt-2 flex justify-between text-xs text-gray-400">
-            <span>Strict: fewer, more precise matches</span>
-            <span>Lenient: more results, higher false-positive risk</span>
+            <button
+              type="submit"
+              disabled={loading || !datasetUrl.trim()}
+              className="w-full sm:w-auto gradient-button text-white px-8 py-3 rounded-lg font-mono text-xs font-bold shadow-lg shadow-primary/20 hover:shadow-primary/40 active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-40 disabled:pointer-events-none"
+            >
+              {loading ? (
+                <>
+                  <div className="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin" />
+                  <span>Connecting to Recognition Worker...</span>
+                </>
+              ) : (
+                <>
+                  <span>Initialize Scan Pipeline</span>
+                  <span className="material-symbols-outlined text-[16px]">rocket_launch</span>
+                </>
+              )}
+            </button>
           </div>
         </div>
       </div>
-
-      {error && (
-        <div className="flex items-start gap-2.5 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-          <svg className="mt-0.5 h-4 w-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
-          </svg>
-          <div>
-            <p className="font-semibold">Dataset step blocked</p>
-            <p className="mt-1">{error}</p>
-          </div>
-        </div>
-      )}
-
-      <button
-        onClick={handleSubmit}
-        disabled={loading}
-        className="flex w-full items-center justify-center gap-2 rounded-2xl bg-violet-600 px-6 py-4 text-lg font-bold text-white transition-colors hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-40"
-      >
-        {loading ? (
-          <>
-            <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-            </svg>
-            Queueing scan job...
-          </>
-        ) : (
-          <>
-            Start AI scan
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z" />
-            </svg>
-          </>
-        )}
-      </button>
-    </div>
+    </form>
   );
 }

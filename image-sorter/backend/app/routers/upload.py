@@ -4,13 +4,14 @@ Handles reference image upload and creates a new processing session.
 """
 
 from fastapi import APIRouter, UploadFile, File, HTTPException, Request
+from fastapi.responses import FileResponse
 from pathlib import Path
 import logging
 
 from app.models.schemas import ProcessingSession, SessionStatus
 from app.services.rate_limiter import RateLimitExceeded, enforce_rate_limit
 from app.services.security import validate_upload_content
-from app.services.session_store import create_session
+from app.services.session_store import create_session, get_session
 from app.services.dataset_retrieval import get_session_temp_dir
 
 router = APIRouter()
@@ -83,3 +84,31 @@ async def upload_reference_image(request: Request, file: UploadFile = File(...))
         "message": "Reference image uploaded successfully. Proceed to /api/process/start",
         "reference_image": file.filename,
     }
+
+
+@router.get("/reference/{session_id}", summary="Get uploaded reference portrait")
+@router.get("/{session_id}/reference", summary="Get uploaded reference portrait (alias)")
+async def get_reference_image(session_id: str):
+    """Serve the reference portrait for the given session."""
+    session = get_session(session_id)
+    if not session or not session.reference_image_path:
+        raise HTTPException(status_code=404, detail="Reference image not found.")
+    
+    ref_path = Path(session.reference_image_path)
+    if not ref_path.exists() or not ref_path.is_file():
+        raise HTTPException(status_code=404, detail="Reference image file not found.")
+    
+    ext = ref_path.suffix.lower()
+    media_types = {
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".png": "image/png",
+        ".webp": "image/webp",
+        ".bmp": "image/bmp",
+    }
+    return FileResponse(
+        path=str(ref_path),
+        media_type=media_types.get(ext, "image/jpeg"),
+        filename=ref_path.name,
+    )
+

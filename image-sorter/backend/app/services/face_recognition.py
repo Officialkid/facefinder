@@ -114,6 +114,43 @@ def _represent_variant(image: np.ndarray, model_name: str):
     )
 
 
+def detect_blur(image_path: str) -> dict:
+    """
+    Detect blur level in an image using Laplacian variance.
+    Returns a dict with blur_score, is_blurry flag, and description.
+    Higher variance = sharper image. Lower variance = blurrier image.
+    """
+    cv2 = _get_cv2()
+    img = cv2.imread(image_path)
+    if img is None:
+        return {"blur_score": 0.0, "is_blurry": True, "description": "Could not load image for blur check."}
+
+    # Convert to grayscale and compute Laplacian variance
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    lap_var = cv2.Laplacian(gray, cv2.CV_64F).var()
+
+    # Thresholds tuned for face photos (frontal, ~640px+ faces)
+    # Very sharp: > 500, Acceptable: 150-500, Blurry: 50-150, Very blurry: < 50
+    if lap_var >= 400:
+        description = "Sharp and clear."
+        is_blurry = False
+    elif lap_var >= 150:
+        description = "Moderately sharp."
+        is_blurry = False
+    elif lap_var >= 50:
+        description = "Somewhat blurry."
+        is_blurry = True
+    else:
+        description = "Very blurry."
+        is_blurry = True
+
+    return {
+        "blur_score": round(lap_var, 2),
+        "is_blurry": is_blurry,
+        "description": description,
+    }
+
+
 def extract_embedding(image_path: str, model_name: str = "ArcFace") -> Optional[np.ndarray]:
     """
     Detect face and extract facial embedding from a reference image.
@@ -197,19 +234,20 @@ def match_face_in_image(
     reference_embedding: np.ndarray,
     model_name: str = "ArcFace",
     distance_threshold: float = 0.4,
-) -> Tuple[bool, float, float, int]:
+) -> Tuple[bool, float, float, int, dict]:
     """
     Try to match the reference face in a dataset image.
 
     Returns:
-        (is_match: bool, similarity_score: float, distance: float)
+        (is_match: bool, similarity_score: float, distance: float, face_count: int, blur_info: dict)
     """
     best_similarity = 0.0
     best_distance = float("inf")
     face_count = 0
     variants = _generate_detection_variants(dataset_image_path)
     if not variants:
-        return False, 0.0, float("inf"), 0
+        blur_info = detect_blur(dataset_image_path)
+        return False, 0.0, float("inf"), 0, blur_info
 
     for variant_name, variant in variants:
         try:
@@ -228,8 +266,9 @@ def match_face_in_image(
                 best_distance = dist
                 best_similarity = sim
 
+    blur_info = detect_blur(dataset_image_path)
     is_match = best_distance <= distance_threshold
-    return is_match, round(best_similarity, 4), round(best_distance, 4), face_count
+    return is_match, round(best_similarity, 4), round(best_distance, 4), face_count, blur_info
 
 
 def scan_dataset(
@@ -242,12 +281,7 @@ def scan_dataset(
     """
     Scan all images in dataset_folder and return matches.
 
-    Returns a dict:
-        {
-          "matched": [{"filename": str, "similarity_score": float, "distance": float}],
-          "total_scanned": int,
-          "processing_time": float,
-        }
+    Returns a dict with matched images, blur info, and scan statistics.
     """
     start_time = time.time()
 
@@ -267,6 +301,14 @@ def scan_dataset(
             ErrorCode.NO_FACE_IN_REFERENCE,
             "No face detected in the reference image. Please upload a clear, front-facing photo.",
         )
+
+    # Check reference blur
+    ref_blur = detect_blur(reference_image_path)
+    logger.info(
+        "Reference blur score: %.2f (%s)",
+        ref_blur["blur_score"],
+        ref_blur["description"],
+    )
 
     # Step 2: Collect dataset images
     supported_exts = {".jpg", ".jpeg", ".png", ".bmp", ".webp", ".tiff"}
@@ -299,9 +341,10 @@ def scan_dataset(
     images_with_detected_faces = 0
     images_without_detected_faces = 0
     images_with_multiple_faces = 0
+    blurry_matches = 0
     total_paths = len(dataset_paths)
     for index, img_path in enumerate(dataset_paths, start=1):
-        is_match, similarity, distance, face_count = match_face_in_image(
+        is_match, similarity, distance, face_count, blur_info = match_face_in_image(
             img_path, reference_embedding, model_name, distance_threshold
         )
         if face_count > 0:
@@ -313,6 +356,9 @@ def scan_dataset(
 
         if is_match:
             confidence_percent, confidence_label, match_reason = classify_confidence(similarity)
+            if blur_info["is_blurry"]:
+                blurry_matches += 1
+                match_reason += f" Note: this image appears blurry ({blur_info['description']})."
             matched.append({
                 "filename": Path(img_path).name,
                 "path": img_path,
@@ -323,8 +369,11 @@ def scan_dataset(
                 "confidence_label": confidence_label,
                 "match_reason": match_reason,
                 "source_group": Path(img_path).parent.name or "root",
+                "blur_score": blur_info["blur_score"],
+                "is_blurry": blur_info["is_blurry"],
+                "blur_description": blur_info["description"],
             })
-            logger.info(f"MATCH: {Path(img_path).name} (sim={similarity}, dist={distance})")
+            logger.info(f"MATCH: {Path(img_path).name} (sim={similarity}, dist={distance}, blur={blur_info['blur_score']})")
 
         if progress_callback:
             progress_callback(
@@ -354,6 +403,8 @@ def scan_dataset(
         "images_with_detected_faces": images_with_detected_faces,
         "images_without_detected_faces": images_without_detected_faces,
         "images_with_multiple_faces": images_with_multiple_faces,
+        "blurry_matches": blurry_matches,
+        "reference_blur": ref_blur,
         "average_match_confidence": round(
             sum(item["similarity_score"] for item in matched) / len(matched),
             4,

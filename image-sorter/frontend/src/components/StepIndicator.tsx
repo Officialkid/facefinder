@@ -6,55 +6,79 @@ interface Step {
 }
 
 const STEPS: Step[] = [
-  { number: 1, label: "Upload Photo" },
-  { number: 2, label: "Provide Dataset" },
-  { number: 3, label: "AI Processing" },
-  { number: 4, label: "Your Results" },
+  { number: 1, label: "Reference Face" },
+  { number: 2, label: "Dataset Source" },
+  { number: 3, label: "AI Recognition" },
+  { number: 4, label: "Results" },
 ];
 
 export default function StepIndicator({ currentStep }: { currentStep: number }) {
   return (
-    <div className="flex items-center justify-center gap-0 mb-10">
-      {STEPS.map((step, i) => {
-        const isCompleted = currentStep > step.number;
-        const isActive = currentStep === step.number;
-        return (
-          <div key={step.number} className="flex items-center">
-            <div className="flex flex-col items-center gap-1.5">
+    <div className="w-full max-w-3xl mx-auto mb-8 px-2">
+      <div className="flex items-center justify-between relative">
+        {/* Track Line */}
+        <div className="absolute top-1/2 left-0 w-full h-[2px] bg-surface-variant -z-10 -translate-y-1/2" />
+        <div
+          className="absolute top-1/2 left-0 h-[2px] bg-gradient-to-r from-secondary to-primary -z-10 -translate-y-1/2 transition-all duration-700"
+          style={{
+            width: `${((currentStep - 1) / (STEPS.length - 1)) * 100}%`,
+          }}
+        />
+
+        {STEPS.map((step) => {
+          const isCompleted = currentStep > step.number;
+          const isActive = currentStep === step.number;
+
+          return (
+            <div key={step.number} className="flex flex-col items-center gap-2 bg-surface-container/60 px-2 py-1 rounded-lg backdrop-blur-md">
               <div
                 className={`
-                  w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold transition-all duration-300
-                  ${isCompleted ? "bg-violet-600 text-white" : ""}
-                  ${isActive ? "bg-indigo-900 text-white ring-4 ring-indigo-100" : ""}
-                  ${!isCompleted && !isActive ? "bg-gray-100 text-gray-400" : ""}
+                  w-8 h-8 rounded-full flex items-center justify-center font-mono text-xs font-bold transition-all duration-300 relative
+                  ${
+                    isCompleted
+                      ? "bg-tertiary-container text-on-tertiary-container shadow-[0_0_10px_rgba(0,165,114,0.4)]"
+                      : ""
+                  }
+                  ${
+                    isActive
+                      ? "bg-surface-variant border-2 border-secondary text-secondary glow-pulse"
+                      : ""
+                  }
+                  ${
+                    !isCompleted && !isActive
+                      ? "bg-surface-variant border border-white/10 text-on-surface-variant"
+                      : ""
+                  }
                 `}
               >
                 {isCompleted ? (
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                  </svg>
+                  <span className="material-symbols-outlined text-[16px] font-bold">check</span>
                 ) : (
-                  step.number
+                  <span>{step.number}</span>
+                )}
+
+                {isActive && (
+                  <div className="absolute inset-0 rounded-full bg-secondary/20 animate-ping pointer-events-none" />
                 )}
               </div>
+
               <span
-                className={`text-xs font-medium whitespace-nowrap ${
-                  isActive ? "text-indigo-900" : isCompleted ? "text-violet-600" : "text-gray-400"
+                className={`font-mono text-[11px] tracking-wider transition-colors text-center whitespace-nowrap ${
+                  isActive
+                    ? "text-secondary font-semibold neon-text-secondary"
+                    : isCompleted
+                    ? "text-tertiary font-medium"
+                    : "text-on-surface-variant"
                 }`}
               >
                 {step.label}
               </span>
             </div>
-            {i < STEPS.length - 1 && (
-              <div
-                className={`h-0.5 w-16 sm:w-24 mb-5 mx-1 transition-all duration-500 ${
-                  currentStep > step.number ? "bg-violet-600" : "bg-gray-200"
-                }`}
-              />
-            )}
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
     </div>
   );
 }
+
+

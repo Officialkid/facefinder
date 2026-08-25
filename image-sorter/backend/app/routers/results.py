@@ -1,4 +1,5 @@
 import logging
+import zipfile
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
@@ -180,6 +181,47 @@ async def download_image(session_id: str, file_path: str):
     )
 
 
+@router.get("/{session_id}/download-all", summary="Download all matched images as a ZIP archive")
+@router.get("/{session_id}/download_all", summary="Download all matched images as a ZIP archive (alias)")
+async def download_all_matches(session_id: str):
+    """
+    Generate and download a ZIP file containing all matched images for this session.
+    Only available when processing is completed.
+    """
+    session = get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found or expired.")
+
+    if session.status != SessionStatus.COMPLETED:
+        raise HTTPException(status_code=400, detail="Processing not yet completed.")
+
+    if not session.matched_images:
+        raise HTTPException(status_code=404, detail="No matched images to download.")
+
+    dataset_dir = get_session_temp_dir(session_id) / "dataset"
+    zip_dir = get_session_temp_dir(session_id)
+    zip_path = zip_dir / f"FaceFinder_Matches_{session_id[:8]}.zip"
+
+    # Create zip file containing all matched images
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+        for idx, match in enumerate(session.matched_images, 1):
+            rel_path = match.relative_path or match.filename
+            img_path = (dataset_dir / rel_path).resolve()
+            if img_path.exists() and img_path.is_file():
+                # Store with rank prefix for clean sorting in file explorer
+                arcname = f"Rank_{match.rank:02d}_{img_path.name}"
+                zf.write(img_path, arcname=arcname)
+
+    if not zip_path.exists() or zip_path.stat().st_size == 0:
+        raise HTTPException(status_code=500, detail="Failed to create matches ZIP archive.")
+
+    return FileResponse(
+        path=str(zip_path),
+        filename=f"FaceFinder_Matches_{session_id[:8]}.zip",
+        media_type="application/zip",
+    )
+
+
 @router.delete("/{session_id}", summary="Delete session and all temporary files")
 async def delete_session_endpoint(session_id: str):
     """
@@ -195,3 +237,4 @@ async def delete_session_endpoint(session_id: str):
 
     logger.info(f"Session manually deleted: {session_id}")
     return {"message": f"Session {session_id} and all associated files deleted."}
+

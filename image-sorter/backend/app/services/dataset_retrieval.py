@@ -43,8 +43,9 @@ IMAGE_HOST_MARKERS = (
     "pixabay.com",
 )
 REQUEST_HEADERS = {
-    "User-Agent": "ImageSorterBot/1.0 (+dataset-retrieval)",
-    "Accept": "*/*",
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
 }
 
 
@@ -162,6 +163,21 @@ def _normalize_candidate_url(raw_url: str, base_url: str) -> Optional[str]:
     candidate = candidate.replace("\\u003d", "=").replace("\\u0026", "&").replace("\\u002f", "/")
     candidate = candidate.replace("\\/", "/").replace("&amp;", "&")
     candidate = urljoin(base_url, candidate)
+
+    # Google Photos special treatment: ensure high-resolution endpoint
+    if "googleusercontent.com" in candidate:
+        if "/a/" in candidate or "/og/" in candidate or "/contacts/" in candidate:
+            return None
+        # Normalize and strip sizing query
+        base_photo_url = re.sub(r"=[^/]*$", "", candidate)
+        return f"{base_photo_url}=w1920-h1080-no"
+
+    # Pixieset special treatment: ensure full size
+    if "pxscdn.com" in candidate or "pixieset.com" in candidate:
+        if "avatar" in candidate or "logo" in candidate:
+            return None
+        return candidate
+
     if not _looks_like_supported_image_url(candidate):
         return None
     return candidate
@@ -170,32 +186,50 @@ def _normalize_candidate_url(raw_url: str, base_url: str) -> Optional[str]:
 def _extract_gallery_image_urls(page_html: str, base_url: str) -> list[str]:
     candidates: list[str] = []
     patterns = [
-        r"""(?:src|content)=["']([^"']+)["']""",
+        r"""(?:src|content|data-src|data-large-src)=["']([^"']+)["']""",
         r"""https?:\\?/\\?/[^"'<>\s)]+""",
     ]
 
     for pattern in patterns:
         for match in re.findall(pattern, page_html, flags=re.IGNORECASE):
             normalized = _normalize_candidate_url(match, base_url)
-            if normalized:
+            if normalized and normalized not in candidates:
                 candidates.append(normalized)
 
-    # Preserve provider ordering while deduplicating.
-    deduped = list(dict.fromkeys(candidates))
-    return deduped
+    return candidates
+
 
 
 def _fetch_gallery_page(url: str) -> str:
     req = _build_request(url, method="GET")
-    with urllib.request.urlopen(req, timeout=DOWNLOAD_TIMEOUT_SECONDS) as response:
-        content_type = (response.headers.get("Content-Type") or "").lower()
-        if "text/html" not in content_type and "application/xhtml+xml" not in content_type:
+    try:
+        with urllib.request.urlopen(req, timeout=DOWNLOAD_TIMEOUT_SECONDS) as response:
+            content_type = (response.headers.get("Content-Type") or "").lower()
+            if "text/html" not in content_type and "application/xhtml+xml" not in content_type:
+                raise DatasetRetrievalError(
+                    ErrorCode.DATASET_INVALID,
+                    "Dataset URL did not return a downloadable file or a supported public gallery page.",
+                )
+            raw_html = response.read()
+            return raw_html.decode("utf-8", errors="ignore")
+    except HTTPError as e:
+        logger.error(f"HTTP error fetching gallery page {url}: {e.code} {e.reason}")
+        if e.code in (401, 403):
             raise DatasetRetrievalError(
-                ErrorCode.DATASET_INVALID,
-                "Dataset URL did not return a downloadable file or a supported public gallery page.",
-            )
-        raw_html = response.read()
-        return raw_html.decode("utf-8", errors="ignore")
+                ErrorCode.DATASET_UNREACHABLE,
+                "The album or gallery link requires a password or login. Please ensure the link is publicly shared.",
+            ) from e
+        raise DatasetRetrievalError(
+            ErrorCode.DATASET_UNREACHABLE,
+            f"Could not access gallery link (HTTP {e.code}: {e.reason}).",
+        ) from e
+    except (URLError, TimeoutError) as e:
+        logger.error(f"Connection error fetching gallery page {url}: {e}")
+        raise DatasetRetrievalError(
+            ErrorCode.DATASET_TIMEOUT,
+            "Timed out while connecting to the dataset host. Please check your internet or album URL.",
+        ) from e
+
 
 
 def _extension_from_content_type(content_type: str, fallback_url: str) -> str:

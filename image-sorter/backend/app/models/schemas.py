@@ -70,6 +70,21 @@ class MatchedImage(BaseModel):
     confidence_label: str
     match_reason: str
     source_group: str
+    blur_score: Optional[float] = Field(default=None, description="Laplacian variance blur score")
+    is_blurry: Optional[bool] = Field(default=None, description="Whether the image is flagged as blurry")
+    blur_description: Optional[str] = Field(default=None, description="Human-readable blur assessment")
+    filename: str
+    relative_path: str
+    similarity_score: float = Field(..., ge=0.0, le=1.0, description="Confidence score 0-1")
+    distance: float = Field(..., description="Embedding distance (lower = more similar)")
+    download_url: str
+    preview_url: str
+    rank: int
+    face_count: Optional[int] = Field(default=None, ge=0)
+    confidence_percent: int = Field(..., ge=0, le=100)
+    confidence_label: str
+    match_reason: str
+    source_group: str
 
 
 class ProcessingSession(BaseModel):

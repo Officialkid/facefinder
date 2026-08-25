@@ -294,7 +294,17 @@ export const ImageSorterAPI = {
   getDownloadUrl: (session_id: string, relativePath: string): string =>
     `/api/results/${session_id}/download/${encodeURIComponent(relativePath)}`,
 
+  getDownloadAllUrl: (session_id: string): string =>
+    `/api/results/${session_id}/download-all`,
+
+  getImageUrl: (session_id: string, relativePath: string): string =>
+    `/api/results/${session_id}/download/${encodeURIComponent(relativePath)}`,
+
+  getReferenceImageUrl: (session_id: string): string =>
+    `/api/upload/${session_id}/reference`,
+
   deleteSession: async (session_id: string): Promise<void> => {
     await api.delete(`/results/${session_id}`);
   },
 };
+

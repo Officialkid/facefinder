@@ -307,6 +307,9 @@ def _run_recognition(session: ProcessingSession) -> None:
                     confidence_label=item["confidence_label"],
                     match_reason=item["match_reason"],
                     source_group=item["source_group"],
+                    blur_score=item.get("blur_score"),
+                    is_blurry=item.get("is_blurry"),
+                    blur_description=item.get("blur_description"),
                 )
             )
 

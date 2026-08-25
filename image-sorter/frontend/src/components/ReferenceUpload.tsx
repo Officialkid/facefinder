@@ -14,31 +14,21 @@ export default function ReferenceUpload({ onSuccess }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
-  useEffect(() => {
-    return () => {
-      if (preview) {
-        URL.revokeObjectURL(preview);
+  const onDrop = useCallback((acceptedFiles: File[]) => {
+    const file = acceptedFiles[0];
+    if (!file) return;
+
+    setError(null);
+    setSelectedFile(file);
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      if (e.target?.result) {
+        setPreview(e.target.result as string);
       }
     };
-  }, [preview]);
-
-  const onDrop = useCallback(
-    (acceptedFiles: File[]) => {
-      const file = acceptedFiles[0];
-      if (!file) return;
-
-      setError(null);
-      setSelectedFile(file);
-
-      if (preview) {
-        URL.revokeObjectURL(preview);
-      }
-
-      const url = URL.createObjectURL(file);
-      setPreview(url);
-    },
-    [preview]
-  );
+    reader.readAsDataURL(file);
+  }, []);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -46,7 +36,7 @@ export default function ReferenceUpload({ onSuccess }: Props) {
     maxFiles: 1,
     maxSize: 10 * 1024 * 1024,
     onDropRejected: (rejections) => {
-      const msg = rejections[0]?.errors[0]?.message ?? "File not accepted.";
+      const msg = rejections[0]?.errors[0]?.message ?? "File not accepted. Please use JPG, PNG, WEBP, or BMP.";
       setError(msg);
     },
   });
@@ -61,7 +51,7 @@ export default function ReferenceUpload({ onSuccess }: Props) {
       const result = await ImageSorterAPI.uploadReference(selectedFile);
       onSuccess(result, preview!);
     } catch (err: any) {
-      const msg = err?.response?.data?.detail ?? "Upload failed. Please try again.";
+      const msg = err?.response?.data?.detail ?? "Upload failed. Please check your image and try again.";
       setError(msg);
     } finally {
       setUploading(false);
@@ -72,181 +62,196 @@ export default function ReferenceUpload({ onSuccess }: Props) {
     if (preview) {
       URL.revokeObjectURL(preview);
     }
-
     setPreview(null);
     setSelectedFile(null);
     setError(null);
   };
 
   return (
-    <div className="space-y-6">
-      <div className="space-y-3">
-        <div className="inline-flex items-center gap-2 rounded-full border border-violet-200 bg-violet-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-violet-700">
-          Step 1
-          <span className="h-1 w-1 rounded-full bg-violet-400" />
-          Reference Photo
-        </div>
+    <div className="w-full flex flex-col items-center">
+      {/* Hero Section */}
+      <div className="text-center max-w-3xl mb-12 mt-4">
+        <h1 className="text-4xl md:text-5xl font-bold text-white mb-6 leading-tight">
+          Find yourself across <br />
+          <span className="gradient-text">thousands of event photos</span>
+        </h1>
+        <p className="text-base text-on-surface-variant mb-8 max-w-2xl mx-auto">
+          Leveraging state-of-the-art facial recognition models to instantly locate your presence in massive unstructured image datasets.
+        </p>
 
-        <div>
-          <h2 className="mb-2 text-3xl font-extrabold tracking-tight text-indigo-950">
-            Upload the clearest photo of yourself
-          </h2>
-          <p className="max-w-2xl text-sm leading-6 text-gray-600">
-            This photo becomes the face signature for the whole search. One visible face works
-            best, but the backend now validates the file type and image signature before any scan
-            begins.
-          </p>
-        </div>
-
-        <div className="flex flex-wrap gap-2">
-          {[
-            "Single visible face",
-            "JPG, PNG, WEBP, BMP",
-            "Up to 10MB",
-            "Temporary session storage",
-          ].map((tip) => (
-            <span
-              key={tip}
-              className="inline-flex items-center rounded-full border border-gray-200 bg-white px-3 py-1 text-xs font-medium text-gray-600"
-            >
-              {tip}
-            </span>
-          ))}
+        {/* Feature Badges */}
+        <div className="flex flex-wrap justify-center gap-3">
+          <div className="glass-panel px-4 py-2 rounded-full flex items-center gap-2">
+            <span className="material-symbols-outlined text-secondary text-sm">memory</span>
+            <span className="font-mono text-xs text-on-surface-variant">512-D Embeddings</span>
+          </div>
+          <div className="glass-panel px-4 py-2 rounded-full flex items-center gap-2">
+            <span className="material-symbols-outlined text-primary text-sm">cloud_download</span>
+            <span className="font-mono text-xs text-on-surface-variant">Multi-Source Ingestion</span>
+          </div>
+          <div className="glass-panel px-4 py-2 rounded-full flex items-center gap-2">
+            <span className="material-symbols-outlined text-secondary text-sm">join_inner</span>
+            <span className="font-mono text-xs text-on-surface-variant">Cosine Similarity Matching</span>
+          </div>
+          <div className="glass-panel px-4 py-2 rounded-full flex items-center gap-2 border-tertiary-fixed-dim/30">
+            <span className="material-symbols-outlined text-tertiary-fixed-dim text-sm">security</span>
+            <span className="font-mono text-xs text-tertiary-fixed-dim">Zero-Retention Privacy</span>
+          </div>
         </div>
       </div>
 
-      {!preview ? (
-        <div
-          {...getRootProps()}
-          className={`relative overflow-hidden rounded-[28px] border-2 border-dashed p-10 text-center transition-all duration-200 sm:p-12 ${
-            isDragActive
-              ? "border-violet-500 bg-violet-50 shadow-lg shadow-violet-100"
-              : "border-gray-200 bg-gradient-to-br from-white via-slate-50 to-violet-50/50 hover:border-violet-400 hover:shadow-md"
-          }`}
-        >
-          <input {...getInputProps()} />
+      {/* Main Interaction Card */}
+      <div className="w-full max-w-4xl glass-panel rounded-2xl p-1 relative overflow-hidden group shadow-2xl">
+        {/* Inner Bevel Effect */}
+        <div className="absolute inset-0 border-t border-l border-white/20 rounded-2xl pointer-events-none" />
+        <div className="absolute inset-0 border-b border-r border-black/40 rounded-2xl pointer-events-none" />
 
-          <div className="pointer-events-none absolute inset-x-8 top-0 h-24 rounded-b-[32px] bg-gradient-to-b from-violet-100/70 to-transparent" />
-
-          <div className="relative flex flex-col items-center gap-4">
-            <div
-              className={`flex h-20 w-20 items-center justify-center rounded-3xl border transition-colors ${
-                isDragActive
-                  ? "border-violet-300 bg-white text-violet-700"
-                  : "border-violet-100 bg-white text-violet-500"
-              }`}
-            >
-              <svg className="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.6}>
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z"
-                />
-              </svg>
+        <div className="bg-surface-container/40 rounded-xl p-6 sm:p-8 backdrop-blur-md">
+          {/* Stepper */}
+          <div className="flex items-center justify-between mb-10 relative">
+            <div className="absolute top-1/2 left-0 w-full h-[2px] bg-surface-variant -z-10 -translate-y-1/2" />
+            <div className="flex flex-col items-center gap-2 bg-surface-container/40 px-2">
+              <div className="w-8 h-8 rounded-full bg-surface-variant flex items-center justify-center border-2 border-secondary glow-pulse relative">
+                <div className="absolute inset-0 rounded-full bg-secondary/20 animate-ping" />
+                <span className="font-mono text-xs text-secondary font-bold z-10">1</span>
+              </div>
+              <span className="font-mono text-xs text-secondary font-semibold">Reference Face</span>
             </div>
-
-            <div className="space-y-2">
-              <h3 className="text-3xl font-extrabold tracking-tight text-slate-900">
-                {isDragActive ? "Drop to prepare your face scan" : "Drop your photo here"}
-              </h3>
-              <p className="text-base text-slate-600">
-                Click to browse or drag a file in. The best reference is sharp, well lit, and
-                centered on your face.
-              </p>
+            <div className="flex flex-col items-center gap-2 bg-surface-container/40 px-2">
+              <div className="w-8 h-8 rounded-full bg-surface-variant flex items-center justify-center border border-white/10 text-on-surface-variant">
+                <span className="font-mono text-xs">2</span>
+              </div>
+              <span className="font-mono text-xs text-on-surface-variant">Dataset Source</span>
             </div>
-
-            <div className="grid w-full max-w-2xl grid-cols-1 gap-3 pt-2 sm:grid-cols-3">
-              <div className="rounded-2xl border border-gray-200 bg-white/80 px-4 py-3">
-                <p className="text-xs uppercase tracking-[0.14em] text-gray-400">Best Match</p>
-                <p className="mt-1 text-sm font-semibold text-gray-700">One face, front-facing, minimal blur</p>
+            <div className="flex flex-col items-center gap-2 bg-surface-container/40 px-2">
+              <div className="w-8 h-8 rounded-full bg-surface-variant flex items-center justify-center border border-white/10 text-on-surface-variant">
+                <span className="font-mono text-xs">3</span>
               </div>
-              <div className="rounded-2xl border border-gray-200 bg-white/80 px-4 py-3">
-                <p className="text-xs uppercase tracking-[0.14em] text-gray-400">Accepted</p>
-                <p className="mt-1 text-sm font-semibold text-gray-700">JPG, PNG, WEBP, BMP</p>
+              <span className="font-mono text-xs text-on-surface-variant">AI Recognition</span>
+            </div>
+            <div className="flex flex-col items-center gap-2 bg-surface-container/40 px-2">
+              <div className="w-8 h-8 rounded-full bg-surface-variant flex items-center justify-center border border-white/10 text-on-surface-variant">
+                <span className="font-mono text-xs">4</span>
               </div>
-              <div className="rounded-2xl border border-gray-200 bg-white/80 px-4 py-3">
-                <p className="text-xs uppercase tracking-[0.14em] text-gray-400">Privacy</p>
-                <p className="mt-1 text-sm font-semibold text-gray-700">Stored only in your temporary session</p>
-              </div>
+              <span className="font-mono text-xs text-on-surface-variant">Results</span>
             </div>
           </div>
-        </div>
-      ) : (
-        <div className="relative overflow-hidden rounded-[28px] border border-violet-200 bg-gradient-to-br from-violet-50 via-white to-emerald-50 shadow-sm">
-          <div className="flex flex-col gap-5 p-5 sm:flex-row sm:items-center">
-            <div className="h-24 w-24 flex-shrink-0 overflow-hidden rounded-2xl border border-violet-200 bg-white shadow-sm">
-              <img src={preview} alt="Reference" className="h-full w-full object-cover" />
-            </div>
 
-            <div className="min-w-0 flex-1">
-              <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-emerald-700">
-                Reference ready
-              </div>
-              <p className="truncate text-lg font-bold text-slate-900">{selectedFile?.name}</p>
-              <p className="mt-1 text-sm text-gray-500">
-                {selectedFile ? `${(selectedFile.size / 1024 / 1024).toFixed(2)} MB` : ""}
-              </p>
-              <div className="mt-3 grid grid-cols-1 gap-2 text-sm text-slate-600 sm:grid-cols-2">
-                <div className="rounded-xl border border-white bg-white/80 px-3 py-2">
-                  The backend will validate the image type before scanning.
-                </div>
-                <div className="rounded-xl border border-white bg-white/80 px-3 py-2">
-                  If this is not the clearest face photo, replace it now.
-                </div>
-              </div>
+          {/* Error Message */}
+          {error && (
+            <div className="mb-6 p-4 rounded-xl bg-error-container/20 border border-error/40 text-error text-xs flex items-center gap-2">
+              <span className="material-symbols-outlined text-[18px]">error</span>
+              <span>{error}</span>
             </div>
+          )}
 
-            <button
-              onClick={handleClear}
-              className="self-start rounded-xl border border-white bg-white/80 p-2 text-gray-500 transition-colors hover:bg-white hover:text-gray-700"
-              aria-label="Remove selected file"
+          {/* Upload Dropzone or Preview */}
+          {!preview ? (
+            <div
+              {...getRootProps()}
+              className={`w-full bg-slate-900/50 border-2 border-dashed rounded-xl p-12 flex flex-col items-center justify-center transition-all duration-300 group/dropzone cursor-pointer relative overflow-hidden ${
+                isDragActive
+                  ? "border-secondary bg-slate-800/70 shadow-[0_0_25px_rgba(76,215,246,0.25)]"
+                  : "border-secondary/40 hover:border-secondary hover:bg-slate-800/50"
+              }`}
             >
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-              </svg>
+              <input {...getInputProps()} />
+              <div className="absolute inset-0 bg-secondary/5 translate-y-full group-hover/dropzone:translate-y-0 transition-transform duration-500 pointer-events-none" />
+
+              {/* Animated SVG Biometric Radar */}
+              <div className="w-16 h-16 mx-auto mb-4 text-secondary opacity-80 group-hover/dropzone:opacity-100 transition-opacity">
+                <svg fill="none" height="64" viewBox="0 0 64 64" width="64" xmlns="http://www.w3.org/2000/svg">
+                  <circle cx="32" cy="32" r="30" stroke="url(#paint0_linear)" strokeDasharray="4 4" strokeWidth="2">
+                    <animateTransform attributeName="transform" dur="10s" from="0 32 32" repeatCount="indefinite" to="360 32 32" type="rotate" />
+                  </circle>
+                  <path d="M20 24C20 20 24 16 32 16C40 16 44 20 44 24M20 40C20 44 24 48 32 48C40 48 44 44 44 40" stroke="#06b6d4" strokeLinecap="round" strokeWidth="2">
+                    <animate attributeName="opacity" dur="2s" repeatCount="indefinite" values="0.3;1;0.3" />
+                  </path>
+                  <rect fill="url(#paint1_linear)" height="2" width="32" x="16" y="31">
+                    <animate attributeName="y" dur="3s" repeatCount="indefinite" values="18;44;18" />
+                  </rect>
+                  <defs>
+                    <linearGradient gradientUnits="userSpaceOnUse" id="paint0_linear" x1="2" x2="62" y1="2" y2="62">
+                      <stop stopColor="#8b5cf6" />
+                      <stop offset="1" stopColor="#06b6d4" />
+                    </linearGradient>
+                    <linearGradient gradientUnits="userSpaceOnUse" id="paint1_linear" x1="16" x2="48" y1="32" y2="32">
+                      <stop stopColor="#8b5cf6" />
+                      <stop offset="0.5" stopColor="#06b6d4" />
+                      <stop offset="1" stopColor="#8b5cf6" />
+                    </linearGradient>
+                  </defs>
+                </svg>
+              </div>
+
+              <h3 className="text-lg font-bold text-white mb-2 text-center">
+                Drag and drop your reference portrait here or <span className="text-secondary underline">browse files</span>
+              </h3>
+              <p className="text-xs text-on-surface-variant text-center max-w-sm mb-6">
+                For optimal results, ensure the face is well-lit, front-facing, and unobstructed.
+              </p>
+
+              {/* Supported Format Tags */}
+              <div className="flex flex-wrap justify-center gap-2">
+                <span className="px-2.5 py-1 rounded-md bg-surface-variant text-[11px] font-mono text-on-surface-variant">JPG</span>
+                <span className="px-2.5 py-1 rounded-md bg-surface-variant text-[11px] font-mono text-on-surface-variant">PNG</span>
+                <span className="px-2.5 py-1 rounded-md bg-surface-variant text-[11px] font-mono text-on-surface-variant">WEBP</span>
+                <span className="px-2.5 py-1 rounded-md bg-surface-variant text-[11px] font-mono text-on-surface-variant">BMP</span>
+                <span className="px-2.5 py-1 rounded-md bg-surface-variant text-[11px] font-mono text-on-surface-variant">Max 10MB</span>
+              </div>
+            </div>
+          ) : (
+            <div className="w-full bg-slate-900/60 border border-secondary/40 rounded-xl p-6 flex flex-col items-center space-y-4">
+              <div className="relative w-44 h-44 rounded-2xl overflow-hidden border-2 border-secondary shadow-[0_0_20px_rgba(76,215,246,0.3)]">
+                <img src={preview} alt="Reference Preview" className="w-full h-full object-cover" />
+                <div className="absolute inset-2 border border-dashed border-secondary/60 rounded-xl pointer-events-none" />
+                <div className="absolute top-2 left-2 w-3 h-3 border-t-2 border-l-2 border-secondary" />
+                <div className="absolute top-2 right-2 w-3 h-3 border-t-2 border-r-2 border-secondary" />
+                <div className="absolute bottom-2 left-2 w-3 h-3 border-b-2 border-l-2 border-secondary" />
+                <div className="absolute bottom-2 right-2 w-3 h-3 border-b-2 border-r-2 border-secondary" />
+              </div>
+
+              <div className="text-center space-y-1">
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-mono font-semibold bg-tertiary-container/30 border border-tertiary-fixed-dim/40 text-tertiary">
+                  <span className="w-1.5 h-1.5 rounded-full bg-tertiary animate-pulse" />
+                  Target Profile Ready
+                </div>
+                <p className="font-mono text-xs text-on-surface-variant pt-1 truncate max-w-xs">{selectedFile?.name}</p>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleClear}
+                className="text-xs font-mono text-outline hover:text-white transition-colors"
+              >
+                Choose Different Photo
+              </button>
+            </div>
+          )}
+
+          {/* Action CTA Button */}
+          <div className="mt-8 flex justify-end">
+            <button
+              type="button"
+              onClick={handleUpload}
+              disabled={!selectedFile || uploading}
+              className="w-full sm:w-auto gradient-button text-white px-8 py-3 rounded-lg font-mono text-xs font-bold shadow-lg shadow-primary/20 hover:shadow-primary/40 active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-40 disabled:pointer-events-none"
+            >
+              {uploading ? (
+                <>
+                  <div className="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin" />
+                  <span>Extracting 512-D Vectors...</span>
+                </>
+              ) : (
+                <>
+                  <span>Confirm &amp; Proceed to Dataset Link</span>
+                  <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
+                </>
+              )}
             </button>
           </div>
         </div>
-      )}
-
-      {error && (
-        <div className="flex items-start gap-2.5 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-          <svg className="mt-0.5 h-4 w-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
-          </svg>
-          <div>
-            <p className="font-semibold">Upload issue</p>
-            <p className="mt-1">{error}</p>
-          </div>
-        </div>
-      )}
-
-      <button
-        onClick={handleUpload}
-        disabled={!selectedFile || uploading}
-        className="flex w-full items-center justify-center gap-2 rounded-2xl bg-indigo-950 px-6 py-4 text-lg font-bold text-white transition-colors hover:bg-indigo-900 disabled:cursor-not-allowed disabled:opacity-40"
-      >
-        {uploading ? (
-          <>
-            <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-            </svg>
-            Validating and uploading...
-          </>
-        ) : (
-          <>
-            Continue to dataset step
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
-            </svg>
-          </>
-        )}
-      </button>
-
-      <p className="text-center text-xs text-gray-500">
-        This file is only used to create your temporary search session and is not kept permanently.
-      </p>
+      </div>
     </div>
   );
 }

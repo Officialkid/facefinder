@@ -1,11 +1,12 @@
 "use client";
 
 import { useCallback, useState } from "react";
+import Link from "next/link";
 import DatasetForm from "@/components/DatasetForm";
+import PricingModal from "@/components/PricingModal";
 import ProcessingStatus from "@/components/ProcessingStatus";
 import ReferenceUpload from "@/components/ReferenceUpload";
 import ResultsGrid from "@/components/ResultsGrid";
-import StepIndicator from "@/components/StepIndicator";
 import {
   getSessionErrorDisplay,
   SessionError,
@@ -20,6 +21,7 @@ export default function Home() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [referencePreview, setReferencePreview] = useState<string | null>(null);
   const [failError, setFailError] = useState<SessionErrorDisplay | null>(null);
+  const [showPricing, setShowPricing] = useState(false);
 
   const handleUploadSuccess = useCallback((result: UploadResponse, preview: string) => {
     setSessionId(result.session_id);
@@ -50,95 +52,171 @@ export default function Home() {
     setFailError(null);
   }, []);
 
+  const [isDark, setIsDark] = useState(true);
+
+  const toggleTheme = () => {
+    const nextDark = !isDark;
+    setIsDark(nextDark);
+    if (nextDark) {
+      document.documentElement.classList.add("dark");
+    } else {
+      document.documentElement.classList.remove("dark");
+    }
+  };
+
   return (
-    <div className="min-h-screen flex flex-col">
-      <header className="bg-indigo-950 text-white">
-        <div className="max-w-5xl mx-auto px-4 py-5 flex items-center justify-between">
+    <div className="min-h-screen flex flex-col font-sans relative overflow-x-hidden selection:bg-primary selection:text-on-primary">
+      {/* Top Navbar */}
+      <nav className="fixed top-0 w-full z-50 bg-surface/80 backdrop-blur-xl border-b border-white/10 shadow-sm transition-all duration-300">
+        <div className="flex justify-between items-center px-6 sm:px-8 py-4 max-w-7xl mx-auto">
+          {/* Brand */}
+          <div className="flex items-center gap-4 cursor-pointer" onClick={handleReset}>
+            <img alt="FaceFinder AI Logo" className="h-8 w-8 rounded-full object-cover shadow-sm" src="/logo.png" />
+            <span className="text-xl md:text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-[#8b5cf6] to-[#06b6d4]">
+              FaceFinder AI
+            </span>
+            <div className="hidden lg:flex items-center gap-2 ml-4 px-3 py-1 rounded-full border border-tertiary-fixed-dim/30 bg-tertiary-fixed-dim/10">
+              <div className="w-2 h-2 rounded-full bg-tertiary-fixed-dim animate-pulse" />
+              <span className="font-mono text-xs text-tertiary-fixed-dim">Engine Live</span>
+            </div>
+          </div>
+
+          {/* Links */}
+          <div className="hidden md:flex items-center gap-7 text-sm">
+            <span className="text-primary font-bold border-b-2 border-primary pb-1 cursor-pointer">Platform</span>
+            <Link href="/live" className="text-on-surface-variant hover:text-secondary font-medium transition-colors flex items-center gap-1.5">
+              <span className="material-symbols-outlined text-[15px] text-tertiary">qr_code_2</span>
+              <span>Live QR Hub</span>
+              <span className="px-1.5 py-0.2 rounded text-[9px] font-mono bg-tertiary/20 text-tertiary border border-tertiary/40">New</span>
+            </Link>
+            <span onClick={() => setShowPricing(true)} className="text-secondary hover:text-white font-semibold transition-colors cursor-pointer flex items-center gap-1">
+              <span className="material-symbols-outlined text-[14px]">bolt</span>
+              <span>Pricing</span>
+            </span>
+          </div>
+
+          {/* Actions */}
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-violet-600 flex items-center justify-center">
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
-                <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-              </svg>
-            </div>
-            <div>
-              <h1 className="font-bold text-lg leading-none">FaceFinder AI</h1>
-              <p className="text-indigo-300 text-xs mt-0.5">AI-Powered Photo Retrieval</p>
-            </div>
-          </div>
-          <div className="hidden sm:flex items-center gap-1.5 text-xs text-indigo-300">
-            <div className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse"></div>
-            Privacy-first | No permanent storage
-          </div>
-        </div>
-      </header>
+            {/* Theme Toggle */}
+            <button
+              onClick={toggleTheme}
+              title={isDark ? "Switch to Lumina Pure Light Mode" : "Switch to Lumina Tech Noir Dark Mode"}
+              className="p-2 rounded-lg border border-white/10 hover:border-secondary/40 text-on-surface-variant hover:text-white transition-colors active:scale-95 flex items-center justify-center"
+            >
+              <span className="material-symbols-outlined text-[18px]">
+                {isDark ? "light_mode" : "dark_mode"}
+              </span>
+            </button>
 
-      {step === 1 && (
-        <div className="bg-gradient-to-b from-indigo-950 to-indigo-900 text-white pb-12 pt-2">
-          <div className="max-w-2xl mx-auto px-4 text-center space-y-4">
-            <p className="inline-block text-xs font-semibold text-violet-300 bg-violet-900/50 border border-violet-700/50 rounded-full px-3 py-1 uppercase tracking-widest">
-              Final Year Project | JKUAT BSc IT 2026
-            </p>
-            <h2 className="text-4xl font-extrabold leading-tight">
-              Find yourself in <br />
-              <span className="text-violet-300">thousands of photos</span>
-            </h2>
-            <p className="text-indigo-200 text-base max-w-lg mx-auto">
-              Upload one reference photo. FaceFinder AI scans your event dataset and pulls out every
-              image that contains your face in seconds.
-            </p>
+            <Link
+              href="/studio"
+              className="hidden md:block font-mono text-xs text-on-surface-variant hover:text-white transition-colors"
+            >
+              Studio Login
+            </Link>
+            <Link
+              href="/studio"
+              className="gradient-button text-white px-4 py-2 rounded-lg font-mono text-xs font-bold shadow-lg shadow-primary/20 hover:shadow-primary/40 active:scale-95 transition-transform"
+            >
+              Get Started
+            </Link>
           </div>
         </div>
-      )}
+      </nav>
 
-      <main className="flex-1 max-w-2xl w-full mx-auto px-4 py-8">
-        <StepIndicator currentStep={step} />
-
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 sm:p-8">
-          {failError && (
-            <div className="mb-6 flex items-start gap-2.5 p-3.5 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">
-              <svg className="w-4 h-4 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
-              </svg>
-              <div>
-                <p className="font-semibold">{failError.title}</p>
-                <p className="mt-0.5 text-red-600">{failError.message}</p>
-                <p className="mt-1 text-red-600/90">{failError.guidance}</p>
-              </div>
+      {/* Main Content Area */}
+      <main className="flex-1 flex flex-col items-center justify-center pt-24 pb-16 px-4 sm:px-6 md:px-8 max-w-7xl mx-auto w-full z-10">
+        {/* Fail Error Banner */}
+        {failError && (
+          <div className="w-full max-w-3xl mb-6 p-4 rounded-2xl bg-error-container/20 border border-error/50 text-on-surface flex items-start gap-3 shadow-lg animate-in fade-in slide-in-from-top-2">
+            <span className="material-symbols-outlined text-error text-[24px] flex-shrink-0 mt-0.5">error</span>
+            <div className="flex-1 space-y-1">
+              <h3 className="font-headline font-bold text-sm text-error">{failError.title}</h3>
+              <p className="font-sans text-xs text-on-surface-variant leading-relaxed">{failError.message}</p>
+              <p className="font-mono text-[11px] text-tertiary-fixed-dim">{failError.guidance}</p>
             </div>
-          )}
+            {/* Note: retryable logic simplified to match provided block */}
+            <button
+              onClick={() => setFailError(null)}
+              className="px-3 py-1 rounded bg-error-container hover:bg-error-container/80 text-on-error-container text-xs font-mono font-bold transition-colors"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
 
-          {step === 1 && <ReferenceUpload onSuccess={handleUploadSuccess} />}
+        {/* Screen 1: Reference Upload */}
+        {step === 1 && <ReferenceUpload onSuccess={handleUploadSuccess} />}
 
-          {step === 2 && sessionId && referencePreview && (
+        {/* Screen 2: Dataset & Model Configuration */}
+        {step === 2 && sessionId && referencePreview && (
+          <div className="w-full max-w-4xl">
             <DatasetForm
               sessionId={sessionId}
               referencePreview={referencePreview}
               onStarted={handleProcessingStarted}
+              onBack={() => setStep(1)}
             />
-          )}
+          </div>
+        )}
 
-          {step === 3 && sessionId && (
+        {/* Screen 3: Live Processing Cockpit */}
+        {step === 3 && sessionId && (
+          <div className="w-full max-w-5xl">
             <ProcessingStatus
               sessionId={sessionId}
               onComplete={handleComplete}
               onFailed={handleFailed}
             />
-          )}
+          </div>
+        )}
 
-          {step === 4 && sessionId && referencePreview && (
+        {/* Screen 4: Results Gallery */}
+        {step === 4 && sessionId && referencePreview && (
+          <div className="w-full max-w-5xl">
             <ResultsGrid
               sessionId={sessionId}
               referencePreview={referencePreview}
               onReset={handleReset}
             />
-          )}
-        </div>
+          </div>
+        )}
       </main>
 
-      <footer className="text-center py-6 text-xs text-gray-400 border-t border-gray-100">
-        Daniel Mwalili Mutinda | SCT221-C004-0765/2022 | JKUAT BSc IT | Supervisor: Dr. Judy Gateri
+      {/* Footer */}
+      <footer className="w-full border-t border-white/10 bg-surface/90 py-8 px-6 sm:px-8 mt-auto z-10">
+        <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
+          <div className="flex items-center gap-2">
+            <img alt="FaceFinder AI Logo" className="h-6 w-6 rounded-full object-cover" src="/logo.png" />
+            <span className="font-bold text-transparent bg-clip-text bg-gradient-to-r from-[#8b5cf6] to-[#06b6d4]">
+              FaceFinder AI
+            </span>
+          </div>
+          <p className="text-xs text-on-surface-variant text-center">
+            &copy; 2026 FaceFinder AI. All rights reserved. Zero-retention facial recognition architecture.
+          </p>
+          <div className="flex flex-wrap items-center justify-center gap-6 text-xs text-on-surface-variant font-mono">
+            <Link href="/docs" className="hover:text-white cursor-pointer transition-colors flex items-center gap-1 text-secondary">
+              <span className="material-symbols-outlined text-[14px]">menu_book</span>
+              <span>Documentation</span>
+            </Link>
+            <Link href="/docs#api-reference" className="hover:text-white cursor-pointer transition-colors">
+              API Reference
+            </Link>
+            <Link href="/docs#security-privacy" className="hover:text-white cursor-pointer transition-colors">
+              Security &amp; Privacy
+            </Link>
+            <span className="hover:text-white cursor-pointer transition-colors">Terms</span>
+          </div>
+        </div>
       </footer>
+
+      {/* Pricing Modal */}
+      <PricingModal isOpen={showPricing} onClose={() => setShowPricing(false)} />
     </div>
   );
 }
+
+
+
+

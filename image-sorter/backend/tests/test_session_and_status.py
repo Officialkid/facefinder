@@ -1031,6 +1031,55 @@ class SessionAndStatusTests(unittest.TestCase):
         prepared_images = sorted(dataset_dir.glob("*.jpg"))
         self.assertEqual(len(prepared_images), 2)
 
+    def test_download_all_matches_returns_valid_zip_archive(self):
+        import zipfile
+        import io
+        from fastapi.testclient import TestClient
+
+        client = TestClient(self.main.app)
+        session_id = "test-download-zip"
+
+        # Create session
+        session = self.schemas.ProcessingSession(
+            session_id=session_id,
+            status=self.schemas.SessionStatus.COMPLETED,
+            matched_images=[
+                self.schemas.MatchedImage(
+                    filename="photo1.jpg",
+                    relative_path="photo1.jpg",
+                    similarity_score=0.15,
+                    distance=0.15,
+                    download_url=f"/api/results/{session_id}/download/photo1.jpg",
+                    preview_url=f"/api/results/{session_id}/download/photo1.jpg",
+                    rank=1,
+                    confidence_percent=85,
+                    confidence_label="High Confidence",
+                    match_reason="Strong cosine similarity",
+                    source_group="Event Album",
+                )
+            ],
+        )
+        self.session_store.create_session(session)
+
+        # Create physical image file in temp dataset
+        dataset_dir = Path(self.dataset_retrieval.get_session_temp_dir(session_id)) / "dataset"
+        dataset_dir.mkdir(parents=True, exist_ok=True)
+        img_path = dataset_dir / "photo1.jpg"
+        img_path.write_bytes(self.valid_jpeg_bytes())
+
+        # Test download-all endpoint
+        response = client.get(f"/api/results/{session_id}/download-all")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers["content-type"], "application/zip")
+
+        # Verify ZIP contains the photo
+        zip_buffer = io.BytesIO(response.content)
+        with zipfile.ZipFile(zip_buffer, "r") as zf:
+            names = zf.namelist()
+            self.assertEqual(len(names), 1)
+            self.assertIn("Rank_01_photo1.jpg", names)
+
 
 if __name__ == "__main__":
     unittest.main()
+

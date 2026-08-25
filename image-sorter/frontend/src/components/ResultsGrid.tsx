@@ -1,13 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import {
-  getApiErrorMessage,
-  ImageSorterAPI,
-  MatchedImage,
-  ResultsResponse,
-} from "@/lib/api";
-import SimilarityBar from "./SimilarityBar";
+import { ImageSorterAPI, MatchedImage, ResultsResponse } from "@/lib/api";
 
 interface Props {
   sessionId: string;
@@ -15,443 +9,449 @@ interface Props {
   onReset: () => void;
 }
 
-type SortMode = "score" | "name";
-
-function getMatchBadge(score: number) {
-  const pct = Math.round(score * 100);
-  if (pct >= 85) {
-    return {
-      tone: "border-emerald-200 bg-emerald-50 text-emerald-700",
-      label: "High match",
-      icon: "✓",
-    };
-  }
-  if (pct >= 65) {
-    return {
-      tone: "border-amber-200 bg-amber-50 text-amber-700",
-      label: "Good match",
-      icon: "!",
-    };
-  }
-  return {
-    tone: "border-orange-200 bg-orange-50 text-orange-700",
-    label: "Possible match",
-    icon: "?",
-  };
-}
+type SortMode = "similarity" | "filename";
+type FilterMode = "all" | "80" | "70";
 
 export default function ResultsGrid({ sessionId, referencePreview, onReset }: Props) {
   const [results, setResults] = useState<ResultsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [downloading, setDownloading] = useState<Set<string>>(new Set());
-  const [sortBy, setSortBy] = useState<SortMode>("score");
+  const [sortMode, setSortMode] = useState<SortMode>("similarity");
+  const [filterMode, setFilterMode] = useState<FilterMode>("all");
+  const [selectedMatch, setSelectedMatch] = useState<MatchedImage | null>(null);
+  const [confirmedMatches, setConfirmedMatches] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
-    const load = async () => {
+    const fetchResults = async () => {
       try {
         const data = await ImageSorterAPI.getResults(sessionId);
         setResults(data);
-      } catch (error) {
-        setError(getApiErrorMessage(error, "Failed to load results."));
+      } catch (err: any) {
+        setError("Failed to retrieve matched results. Please try again.");
       } finally {
         setLoading(false);
       }
     };
 
-    load();
+    fetchResults();
   }, [sessionId]);
 
-  const handleDownload = async (image: MatchedImage) => {
-    setDownloading((prev) => new Set(prev).add(image.relative_path));
-    try {
-      const url = ImageSorterAPI.getDownloadUrl(sessionId, image.relative_path);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = image.filename;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-    } finally {
-      setDownloading((prev) => {
-        const next = new Set(prev);
-        next.delete(image.relative_path);
-        return next;
-      });
+  const filteredMatches = useMemo(() => {
+    if (!results?.matched_images) return [];
+
+    let list = [...results.matched_images];
+
+    // Filter
+    if (filterMode === "80") {
+      list = list.filter((m) => (1 - m.similarity_score) >= 0.8);
+    } else if (filterMode === "70") {
+      list = list.filter((m) => (1 - m.similarity_score) >= 0.7);
     }
+
+    // Sort
+    if (sortMode === "similarity") {
+      list.sort((a, b) => a.similarity_score - b.similarity_score);
+    } else if (sortMode === "filename") {
+      list.sort((a, b) => a.filename.localeCompare(b.filename));
+    }
+
+    return list;
+  }, [results, filterMode, sortMode]);
+
+  const topMatchPercent = useMemo(() => {
+    if (!results?.matched_images?.length) return 0;
+    const bestDist = Math.min(...results.matched_images.map((m) => m.similarity_score));
+    return Math.round((1 - bestDist) * 100);
+  }, [results]);
+
+  const avgMatchPercent = useMemo(() => {
+    if (!results?.matched_images?.length) return 0;
+    const avgDist =
+      results.matched_images.reduce((acc, m) => acc + m.similarity_score, 0) /
+      results.matched_images.length;
+    return Math.round((1 - avgDist) * 100);
+  }, [results]);
+
+  const handleToggleConfirm = (filename: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setConfirmedMatches((prev) => ({
+      ...prev,
+      [filename]: !prev[filename],
+    }));
   };
 
-  const handleDownloadAll = async () => {
-    if (!results) return;
-    for (const img of results.matched_images) {
-      await handleDownload(img);
-      await new Promise((resolve) => setTimeout(resolve, 300));
-    }
+  const handleDownloadAll = () => {
+    const url = ImageSorterAPI.getDownloadAllUrl(sessionId);
+    window.open(url, "_blank");
   };
 
-  const sorted = useMemo(() => {
-    if (!results) return [];
-    return [...results.matched_images].sort((a, b) =>
-      sortBy === "score"
-        ? b.similarity_score - a.similarity_score
-        : a.filename.localeCompare(b.filename)
-    );
-  }, [results, sortBy]);
+  const handleDownloadSingle = (match: MatchedImage) => {
+    const url = ImageSorterAPI.getDownloadUrl(sessionId, match.relative_path || match.filename);
+    window.open(url, "_blank");
+  };
 
   if (loading) {
     return (
-      <div className="flex flex-col items-center justify-center gap-4 py-20">
-        <svg className="h-8 w-8 animate-spin text-violet-600" fill="none" viewBox="0 0 24 24">
-          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-        </svg>
-        <p className="text-sm text-gray-500">Loading your results...</p>
+      <div className="py-20 flex flex-col items-center justify-center space-y-4">
+        <div className="w-10 h-10 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+        <p className="font-mono text-sm text-secondary">Aggregating matched biometric vectors...</p>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="py-14 text-center">
-        <p className="font-semibold text-red-600">{error}</p>
-        <button onClick={onReset} className="mt-4 text-sm font-semibold text-violet-600 hover:underline">
-          Start over
+      <div className="p-6 glass-panel rounded-2xl text-center space-y-4 border-error/40">
+        <span className="material-symbols-outlined text-[36px] text-error">error</span>
+        <p className="text-sm font-bold text-error">{error}</p>
+        <button onClick={onReset} className="gradient-button text-white px-6 py-2.5 rounded-lg font-mono text-xs font-bold">
+          Start New Search
         </button>
       </div>
     );
   }
 
-  if (!results) return null;
+  const matchCount = filteredMatches.length;
 
   return (
-    <div className="space-y-8">
-      <div className="rounded-[30px] border border-gray-200 bg-white p-6 shadow-sm">
-        <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
-          <div className="space-y-3">
-            <div className="inline-flex items-center gap-2 rounded-full border border-violet-200 bg-violet-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-violet-700">
-              Step 4
-              <span className="h-1 w-1 rounded-full bg-violet-400" />
-              Results
-            </div>
-
-            <div>
-              <h2 className="mb-2 text-3xl font-extrabold tracking-tight text-slate-950">
-                {results.matched_count > 0
-                  ? `Found ${results.matched_count} photo${results.matched_count !== 1 ? "s" : ""} of you`
-                  : "No confident matches found"}
-              </h2>
-              <p className="max-w-2xl text-sm leading-6 text-gray-600">
-                The scan reviewed {results.total_images_scanned.toLocaleString()} image
-                {results.total_images_scanned === 1 ? "" : "s"}
-                {results.processing_time_seconds
-                  ? ` in ${results.processing_time_seconds.toFixed(2)} seconds`
-                  : ""}.
-              </p>
-            </div>
+    <div className="w-full space-y-8">
+      {/* Top Header & Stepper */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/10 pb-6">
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <span className="px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-tertiary-container/30 border border-tertiary-fixed-dim/40 text-tertiary flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-tertiary animate-pulse" />
+              Scan Complete
+            </span>
+            <span className="font-mono text-xs text-on-surface-variant">
+              Session: {sessionId ? `FF-AI-${sessionId.slice(0, 5).toUpperCase()}` : "FF-AI-9928X"}
+            </span>
           </div>
+          <h2 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
+            Found {matchCount} Matching {matchCount === 1 ? "Photo" : "Photos"}
+          </h2>
+        </div>
 
-          <div className="flex flex-col gap-3 sm:flex-row lg:flex-col">
-            <div className="flex items-center gap-3 rounded-2xl border border-gray-200 bg-slate-50 px-4 py-3">
-              <div className="h-11 w-11 overflow-hidden rounded-xl border border-gray-200 bg-white">
-                <img src={referencePreview} alt="Reference" className="h-full w-full object-cover" />
-              </div>
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">
-                  Reference
-                </p>
-                <p className="text-sm font-medium text-gray-700">Matched against your uploaded face</p>
-              </div>
-            </div>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={onReset}
+            className="px-4 py-2 rounded-lg bg-surface-container border border-white/10 hover:border-secondary/40 text-white font-mono text-xs transition-all flex items-center gap-1.5"
+          >
+            <span className="material-symbols-outlined text-[16px]">refresh</span>
+            <span>New Search</span>
+          </button>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div className="rounded-2xl border border-gray-200 bg-white px-4 py-3">
-                <p className="text-xs uppercase tracking-[0.16em] text-gray-400">Matches</p>
-                <p className="mt-1 text-2xl font-black text-slate-900">{results.matched_count}</p>
-              </div>
-              <div className="rounded-2xl border border-gray-200 bg-white px-4 py-3">
-                <p className="text-xs uppercase tracking-[0.16em] text-gray-400">Scanned</p>
-                <p className="mt-1 text-2xl font-black text-slate-900">
-                  {results.total_images_scanned.toLocaleString()}
-                </p>
-              </div>
-            </div>
+          {matchCount > 0 && (
+            <button
+              onClick={handleDownloadAll}
+              className="gradient-button text-white px-5 py-2 rounded-lg font-mono text-xs font-bold shadow-lg shadow-primary/20 hover:shadow-primary/40 active:scale-95 transition-all flex items-center gap-2"
+            >
+              <span className="material-symbols-outlined text-[16px]">folder_zip</span>
+              <span>Download All Matches (ZIP)</span>
+            </button>
+          )}
+        </div>
+      </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div className="rounded-2xl border border-gray-200 bg-white px-4 py-3">
-                <p className="text-xs uppercase tracking-[0.16em] text-gray-400">Faces found</p>
-                <p className="mt-1 text-2xl font-black text-slate-900">
-                  {results.images_with_detected_faces.toLocaleString()}
-                </p>
-              </div>
-              <div className="rounded-2xl border border-gray-200 bg-white px-4 py-3">
-                <p className="text-xs uppercase tracking-[0.16em] text-gray-400">Top confidence</p>
-                <p className="mt-1 text-2xl font-black text-slate-900">
-                  {results.top_match_confidence != null
-                    ? `${Math.round(results.top_match_confidence * 100)}%`
-                    : "N/A"}
-                </p>
-              </div>
-            </div>
+      {/* 4 Overview Metric Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="glass-panel rounded-xl p-4 flex flex-col justify-between bg-surface-container-low/60">
+          <div className="flex items-center justify-between mb-2">
+            <span className="font-mono text-[10px] uppercase text-outline">Total Scanned</span>
+            <span className="material-symbols-outlined text-secondary text-[18px]">photo_library</span>
+          </div>
+          <div>
+            <p className="font-mono text-2xl font-bold text-white">
+              {results?.total_images_scanned ?? results?.matched_images?.length ?? 0}
+            </p>
+            <span className="font-mono text-[10px] text-on-surface-variant">Dataset images analyzed</span>
+          </div>
+        </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div className="rounded-2xl border border-gray-200 bg-white px-4 py-3">
-                <p className="text-xs uppercase tracking-[0.16em] text-gray-400">Model</p>
-                <p className="mt-1 text-sm font-bold text-slate-900">
-                  {results.requested_model_name ?? "Unknown"}
-                </p>
-              </div>
-              <div className="rounded-2xl border border-gray-200 bg-white px-4 py-3">
-                <p className="text-xs uppercase tracking-[0.16em] text-gray-400">Threshold</p>
-                <p className="mt-1 text-sm font-bold text-slate-900">
-                  {results.requested_similarity_threshold != null
-                    ? results.requested_similarity_threshold.toFixed(2)
-                    : "Unknown"}
-                </p>
-              </div>
-            </div>
+        <div className="glass-panel rounded-xl p-4 flex flex-col justify-between bg-surface-container-low/60">
+          <div className="flex items-center justify-between mb-2">
+            <span className="font-mono text-[10px] uppercase text-outline">Top Match Score</span>
+            <span className="material-symbols-outlined text-tertiary text-[18px]">verified</span>
+          </div>
+          <div>
+            <p className="font-mono text-2xl font-bold text-tertiary neon-text-tertiary">
+              {topMatchPercent}%
+            </p>
+            <span className="font-mono text-[10px] text-on-surface-variant">Highest similarity rank</span>
+          </div>
+        </div>
+
+        <div className="glass-panel rounded-xl p-4 flex flex-col justify-between bg-surface-container-low/60">
+          <div className="flex items-center justify-between mb-2">
+            <span className="font-mono text-[10px] uppercase text-outline">Avg Similarity</span>
+            <span className="material-symbols-outlined text-primary text-[18px]">analytics</span>
+          </div>
+          <div>
+            <p className="font-mono text-2xl font-bold text-primary neon-text-primary">
+              {avgMatchPercent}%
+            </p>
+            <span className="font-mono text-[10px] text-on-surface-variant">Across candidate pool</span>
+          </div>
+        </div>
+
+        <div className="glass-panel rounded-xl p-4 flex flex-col justify-between bg-surface-container-low/60">
+          <div className="flex items-center justify-between mb-2">
+            <span className="font-mono text-[10px] uppercase text-outline">Verified by You</span>
+            <span className="material-symbols-outlined text-secondary text-[18px]">how_to_reg</span>
+          </div>
+          <div>
+            <p className="font-mono text-2xl font-bold text-white">
+              {Object.values(confirmedMatches).filter(Boolean).length} / {matchCount}
+            </p>
+            <span className="font-mono text-[10px] text-on-surface-variant">Confirmed identities</span>
           </div>
         </div>
       </div>
 
-      {results.matched_count === 0 ? (
-        <div className="rounded-[30px] border border-gray-200 bg-white p-10 text-center shadow-sm">
-          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-3xl bg-slate-100">
-            <svg className="h-8 w-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15.182 16.318A4.486 4.486 0 0012.016 15a4.486 4.486 0 00-3.198 1.318M21 12a9 9 0 11-18 0 9 9 0 0118 0zM9.75 9.75c0 .414-.168.75-.375.75S9 10.164 9 9.75 9.168 9 9.375 9s.375.336.375.75zm-.375 0h.008v.015h-.008V9.75zm5.625 0c0 .414-.168.75-.375.75s-.375-.336-.375-.75.168-.75.375-.75.375.336.375.75zm-.375 0h.008v.015h-.008V9.75z" />
-            </svg>
+      {/* Toolbar: Sort & Filter */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl glass-panel bg-surface-container-low/40">
+        <div className="flex items-center gap-2">
+          <span className="font-mono text-xs text-outline">Filter by Cutoff:</span>
+          <div className="inline-flex rounded-lg bg-surface-container p-0.5 border border-white/5 font-mono text-xs">
+            <button
+              onClick={() => setFilterMode("all")}
+              className={`px-3 py-1 rounded-md transition-all ${
+                filterMode === "all" ? "bg-secondary text-surface font-bold shadow-sm" : "text-on-surface-variant hover:text-white"
+              }`}
+            >
+              All ({results?.matched_images?.length ?? 0})
+            </button>
+            <button
+              onClick={() => setFilterMode("80")}
+              className={`px-3 py-1 rounded-md transition-all ${
+                filterMode === "80" ? "bg-secondary text-surface font-bold shadow-sm" : "text-on-surface-variant hover:text-white"
+              }`}
+            >
+              &gt;80%
+            </button>
+            <button
+              onClick={() => setFilterMode("70")}
+              className={`px-3 py-1 rounded-md transition-all ${
+                filterMode === "70" ? "bg-secondary text-surface font-bold shadow-sm" : "text-on-surface-variant hover:text-white"
+              }`}
+            >
+              &gt;70%
+            </button>
           </div>
-          <h3 className="mt-4 text-xl font-bold text-slate-900">No photos matched strongly enough</h3>
-          <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-gray-500">
-            Try a clearer reference photo, a more complete dataset, or a slightly more lenient
-            match sensitivity before scanning again.
+        </div>
+
+        <div className="flex items-center gap-2">
+          <span className="font-mono text-xs text-outline">Sort by:</span>
+          <select
+            value={sortMode}
+            onChange={(e) => setSortMode(e.target.value as SortMode)}
+            className="bg-surface-container border border-white/10 rounded-lg px-3 py-1.5 text-xs font-mono text-white focus:outline-none focus:border-secondary"
+          >
+            <option value="similarity">Highest Similarity</option>
+            <option value="filename">Filename (A-Z)</option>
+          </select>
+        </div>
+      </div>
+
+      {/* 3-Column Matched Photo Grid */}
+      {matchCount === 0 ? (
+        <div className="p-12 text-center glass-panel rounded-2xl space-y-3">
+          <span className="material-symbols-outlined text-[48px] text-outline">search_off</span>
+          <h3 className="text-lg font-bold text-white">No Matching Photos Found</h3>
+          <p className="text-xs text-on-surface-variant max-w-md mx-auto">
+            Try adjusting your sensitivity slider to a broader threshold (e.g. 0.50) or verify that the album contains clear, well-lit photos.
           </p>
           <button
             onClick={onReset}
-            className="mt-6 inline-flex items-center gap-2 rounded-2xl bg-violet-600 px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-violet-700"
+            className="mt-4 px-6 py-2.5 rounded-lg gradient-button text-white font-mono text-xs font-bold"
           >
-            Start a new search
+            Adjust Parameters
           </button>
         </div>
       ) : (
-        <>
-          <div className="flex flex-col gap-3 rounded-[26px] border border-gray-200 bg-white p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">
-                Sort by
-              </span>
-              <button
-                onClick={() => setSortBy("score")}
-                className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${
-                  sortBy === "score"
-                    ? "bg-indigo-950 text-white"
-                    : "border border-gray-200 bg-slate-50 text-gray-600 hover:bg-slate-100"
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          {filteredMatches.map((match, idx) => {
+            const matchPercent = Math.round((1 - match.similarity_score) * 100);
+            const isConfirmed = confirmedMatches[match.filename] ?? false;
+
+            return (
+              <div
+                key={match.filename || idx}
+                className={`group relative rounded-xl overflow-hidden glass-panel border transition-all duration-300 flex flex-col bg-surface-container/60 shadow-md ${
+                  isConfirmed ? "border-tertiary shadow-[0_0_15px_rgba(78,222,163,0.25)]" : "border-white/10 hover:border-secondary/50"
                 }`}
               >
-                Similarity
-              </button>
-              <button
-                onClick={() => setSortBy("name")}
-                className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${
-                  sortBy === "name"
-                    ? "bg-indigo-950 text-white"
-                    : "border border-gray-200 bg-slate-50 text-gray-600 hover:bg-slate-100"
-                }`}
-              >
-                Filename
-              </button>
-            </div>
+                {/* Photo Preview Container */}
+                <div className="relative aspect-[4/3] bg-surface-container-lowest overflow-hidden">
+                  <img
+                    src={match.preview_url || ImageSorterAPI.getImageUrl(sessionId, match.relative_path || match.filename)}
+                    alt={match.filename}
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                    loading="lazy"
+                  />
 
-            <div className="flex flex-col gap-2 sm:flex-row">
-              <button
-                onClick={handleDownloadAll}
-                className="inline-flex items-center justify-center gap-2 rounded-2xl border border-violet-200 bg-violet-50 px-4 py-2 text-sm font-semibold text-violet-700 transition-colors hover:bg-violet-100"
-              >
-                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
-                </svg>
-                Download all
-              </button>
+                  {/* Top Badges */}
+                  <div className="absolute top-2.5 left-2.5 flex items-center gap-1.5">
+                    <span className="px-2.5 py-1 rounded-full text-xs font-mono font-bold bg-surface-container/90 backdrop-blur-md border border-white/10 text-white flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-secondary animate-pulse" />
+                      {matchPercent}% Match
+                    </span>
+                    <span className="px-2 py-1 rounded-full text-[10px] font-mono font-bold bg-surface-container/80 backdrop-blur-md text-outline">
+                      #{idx + 1}
+                    </span>
+                  </div>
 
-              <button
-                onClick={onReset}
-                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-indigo-950 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-indigo-900"
-              >
-                New search
-              </button>
-            </div>
-          </div>
+                  {/* User Verified Status Chip */}
+                  {isConfirmed && (
+                    <div className="absolute top-2.5 right-2.5 px-2 py-0.5 rounded-full bg-tertiary text-surface text-[10px] font-mono font-bold flex items-center gap-1 shadow-md">
+                      <span className="material-symbols-outlined text-[12px]">check_circle</span>
+                      Confirmed You
+                    </div>
+                  )}
 
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
-            <div className="rounded-2xl border border-gray-200 bg-white px-4 py-3 shadow-sm">
-              <p className="text-xs uppercase tracking-[0.16em] text-gray-400">Avg match</p>
-              <p className="mt-1 text-xl font-black text-slate-900">
-                {results.average_match_confidence != null
-                  ? `${Math.round(results.average_match_confidence * 100)}%`
-                  : "N/A"}
-              </p>
-            </div>
-            <div className="rounded-2xl border border-gray-200 bg-white px-4 py-3 shadow-sm">
-              <p className="text-xs uppercase tracking-[0.16em] text-gray-400">No-face images</p>
-              <p className="mt-1 text-xl font-black text-slate-900">
-                {results.images_without_detected_faces.toLocaleString()}
-              </p>
-            </div>
-            <div className="rounded-2xl border border-gray-200 bg-white px-4 py-3 shadow-sm">
-              <p className="text-xs uppercase tracking-[0.16em] text-gray-400">Multi-face images</p>
-              <p className="mt-1 text-xl font-black text-slate-900">
-                {results.images_with_multiple_faces.toLocaleString()}
-              </p>
-            </div>
-            <div className="rounded-2xl border border-gray-200 bg-white px-4 py-3 shadow-sm">
-              <p className="text-xs uppercase tracking-[0.16em] text-gray-400">Review note</p>
-              <p className="mt-1 text-sm font-medium leading-5 text-slate-700">
-                Backend ranking favors stronger similarity first. Multi-face frames may need visual review.
-              </p>
-            </div>
-          </div>
+                  {/* Hover Actions Overlay */}
+                  <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2 p-4">
+                    <button
+                      onClick={() => setSelectedMatch(match)}
+                      className="px-3.5 py-2 rounded-lg bg-surface/90 hover:bg-white text-surface text-xs font-mono font-bold transition-all flex items-center gap-1.5"
+                    >
+                      <span className="material-symbols-outlined text-[16px] text-primary">compare</span>
+                      <span>Compare</span>
+                    </button>
+                    <button
+                      onClick={() => handleDownloadSingle(match)}
+                      className="p-2 rounded-lg bg-secondary text-surface hover:bg-white transition-all"
+                      title="Download Photo"
+                    >
+                      <span className="material-symbols-outlined text-[18px]">download</span>
+                    </button>
+                  </div>
+                </div>
 
-          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3">
-            {sorted.map((image, index) => (
-              <ImageCard
-                key={image.relative_path}
-                image={image}
-                sessionId={sessionId}
-                isDownloading={downloading.has(image.relative_path)}
-                onDownload={() => handleDownload(image)}
-                animationDelay={index * 50}
-              />
-            ))}
-          </div>
-        </>
+                {/* Card Details & Confirm Verification */}
+                <div className="p-4 space-y-3 flex-1 flex flex-col justify-between">
+                  <div>
+                    <p className="font-mono text-xs font-bold text-white truncate" title={match.filename}>
+                      {match.filename}
+                    </p>
+                    <div className="flex items-center justify-between mt-1 text-[11px] font-mono text-outline">
+                      <span>Cos Dist: {match.similarity_score.toFixed(3)}</span>
+                      <span>{match.source_group || "Event Photo"}</span>
+                    </div>
+                  </div>
+
+                  {/* Similarity track */}
+                  <div className="w-full h-1 rounded-full bg-surface-variant overflow-hidden">
+                    <div className="h-full bg-gradient-to-r from-tertiary to-secondary rounded-full" style={{ width: `${matchPercent}%` }} />
+                  </div>
+
+                  {/* Confirm if this is you button */}
+                  <button
+                    onClick={(e) => handleToggleConfirm(match.filename, e)}
+                    className={`w-full py-1.5 px-3 rounded-lg text-xs font-mono font-bold transition-all flex items-center justify-center gap-1.5 ${
+                      isConfirmed
+                        ? "bg-tertiary-container/30 border border-tertiary-fixed-dim/60 text-tertiary"
+                        : "bg-surface-container border border-white/10 hover:border-secondary/40 text-on-surface-variant hover:text-white"
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-[14px]">
+                      {isConfirmed ? "check" : "thumb_up"}
+                    </span>
+                    <span>{isConfirmed ? "Confirmed: This is Me" : "Confirm if this is you"}</span>
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
       )}
 
-      <div className="flex items-start gap-3 rounded-2xl border border-gray-200 bg-slate-50 p-4 text-sm text-gray-600">
-        <svg className="mt-0.5 h-4 w-4 flex-shrink-0 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
-        </svg>
-        <p>
-          All uploaded files and matched images remain temporary session data and are automatically
-          cleaned up after expiry.
-        </p>
-      </div>
-    </div>
-  );
-}
-
-function ImageCard({
-  image,
-  sessionId,
-  isDownloading,
-  onDownload,
-  animationDelay,
-}: {
-  image: MatchedImage;
-  sessionId: string;
-  isDownloading: boolean;
-  onDownload: () => void;
-  animationDelay: number;
-}) {
-  const [visible, setVisible] = useState(false);
-
-  useEffect(() => {
-    const timer = setTimeout(() => setVisible(true), animationDelay);
-    return () => clearTimeout(timer);
-  }, [animationDelay]);
-
-  const previewUrl = image.preview_url || ImageSorterAPI.getDownloadUrl(sessionId, image.relative_path);
-  const badge = getMatchBadge(image.similarity_score);
-
-  return (
-    <div
-      className={`group overflow-hidden rounded-[28px] border border-gray-200 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-lg ${
-        visible ? "translate-y-0 opacity-100" : "translate-y-4 opacity-0"
-      }`}
-      style={{ transitionDelay: `${animationDelay}ms` }}
-    >
-      <div className="relative aspect-[4/3] overflow-hidden bg-gradient-to-br from-slate-100 to-slate-200">
-        <img
-          src={previewUrl}
-          alt={image.filename}
-          className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
-          onError={(e) => {
-            (e.target as HTMLImageElement).style.display = "none";
-          }}
-        />
-
-        <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-slate-900/0 to-slate-900/0 opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
-
-        <div className="absolute left-4 top-4">
-          <div className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-semibold backdrop-blur-sm ${badge.tone}`}>
-            <span>{badge.icon}</span>
-            <span>{badge.label}</span>
-          </div>
-        </div>
-
-        <div className="absolute right-4 top-4 rounded-full bg-white/90 px-2.5 py-1 text-xs font-bold text-slate-900 shadow-sm">
-          #{image.rank}
-        </div>
-      </div>
-
-      <div className="space-y-4 p-4">
-        <div className="space-y-2">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <p className="truncate text-sm font-semibold text-slate-900" title={image.filename}>
-                {image.filename}
-              </p>
-              <p className="mt-1 text-xs text-gray-500">
-                {image.face_count !== null && image.face_count > 0
-                  ? `${image.face_count} face${image.face_count === 1 ? "" : "s"} detected`
-                  : "Face count unavailable"}
-              </p>
-              <p className="mt-1 text-xs text-gray-500">
-                Confidence {image.confidence_percent}% • {image.confidence_label.replace("_", " ")}
-              </p>
-              <p className="mt-1 text-xs text-gray-500">
-                Source group: {image.source_group}
-              </p>
-              <p className="mt-1 truncate text-[11px] text-gray-400" title={image.relative_path}>
-                {image.relative_path}
-              </p>
+      {/* Side-by-Side Verification Modal */}
+      {selectedMatch && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+          <div className="relative w-full max-w-3xl glass-panel-glow rounded-2xl p-6 border border-primary/40 space-y-6 shadow-2xl overflow-hidden">
+            <div className="flex items-center justify-between border-b border-white/10 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-primary/20 border border-primary/40 flex items-center justify-center text-primary">
+                  <span className="material-symbols-outlined text-[18px]">compare</span>
+                </div>
+                <div>
+                  <h3 className="font-headline text-lg font-bold text-white">Side-by-Side Comparison</h3>
+                  <p className="font-mono text-xs text-on-surface-variant">Biometric similarity verification</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setSelectedMatch(null)}
+                className="p-1.5 rounded-lg bg-surface border border-white/10 hover:bg-white/10 text-on-surface-variant hover:text-white transition-colors"
+              >
+                <span className="material-symbols-outlined text-[20px]">close</span>
+              </button>
             </div>
-            <div className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">
-              Dist {image.distance.toFixed(2)}
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+              <div className="space-y-2">
+                <span className="font-mono text-[11px] uppercase tracking-widest text-on-surface-variant block">Reference Portrait</span>
+                <div className="relative aspect-square rounded-xl overflow-hidden border-2 border-primary/50 bg-surface-container-lowest">
+                  <img src={referencePreview} alt="Reference" className="w-full h-full object-cover" />
+                  <div className="absolute inset-3 border border-dashed border-primary/60 rounded-lg pointer-events-none" />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <span className="font-mono text-[11px] uppercase tracking-widest text-on-surface-variant block">Matched Photo ({selectedMatch.filename})</span>
+                <div className="relative aspect-square rounded-xl overflow-hidden border-2 border-secondary/50 bg-surface-container-lowest">
+                  <img
+                    src={selectedMatch.preview_url || ImageSorterAPI.getImageUrl(sessionId, selectedMatch.relative_path || selectedMatch.filename)}
+                    alt="Matched Photo"
+                    className="w-full h-full object-cover"
+                  />
+                  <div className="absolute inset-3 border border-dashed border-secondary/60 rounded-lg pointer-events-none" />
+                </div>
+              </div>
+            </div>
+
+            <div className="p-4 rounded-xl bg-surface-container/60 border border-white/10 flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div className="flex items-center gap-6">
+                <div>
+                  <span className="font-mono text-[10px] text-outline uppercase block">Cosine Distance</span>
+                  <span className="font-mono text-base font-bold text-secondary">
+                    {selectedMatch.similarity_score.toFixed(4)}
+                  </span>
+                </div>
+                <div>
+                  <span className="font-mono text-[10px] text-outline uppercase block">Confidence</span>
+                  <span className="font-mono text-base font-bold text-tertiary neon-text-tertiary">
+                    {Math.round((1 - selectedMatch.similarity_score) * 100)}%
+                  </span>
+                </div>
+                <div>
+                  <span className="font-mono text-[10px] text-outline uppercase block">User Feedback</span>
+                  <button
+                    onClick={() => handleToggleConfirm(selectedMatch.filename)}
+                    className={`mt-0.5 px-2.5 py-1 rounded text-[11px] font-mono font-bold flex items-center gap-1 transition-all ${
+                      confirmedMatches[selectedMatch.filename]
+                        ? "bg-tertiary text-surface"
+                        : "bg-surface-container border border-white/10 text-on-surface-variant"
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-[12px]">
+                      {confirmedMatches[selectedMatch.filename] ? "check" : "add"}
+                    </span>
+                    <span>{confirmedMatches[selectedMatch.filename] ? "Confirmed Me" : "Confirm Match"}</span>
+                  </button>
+                </div>
+              </div>
+
+              <button
+                onClick={() => handleDownloadSingle(selectedMatch)}
+                className="gradient-button text-white px-5 py-2.5 rounded-lg font-mono text-xs font-bold shadow-lg shadow-primary/20 hover:shadow-primary/40 active:scale-95 transition-all flex items-center gap-2"
+              >
+                <span className="material-symbols-outlined text-[16px]">download</span>
+                <span>Download Photo</span>
+              </button>
             </div>
           </div>
-
-          <SimilarityBar score={image.similarity_score} />
-          <p className="text-xs leading-5 text-gray-500">{image.match_reason}</p>
         </div>
-
-        <div className="flex gap-2">
-          <button
-            onClick={onDownload}
-            disabled={isDownloading}
-            className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-indigo-950 py-2.5 text-xs font-semibold text-white transition-colors hover:bg-indigo-900 disabled:opacity-50"
-          >
-            {isDownloading ? (
-              <>
-                <svg className="h-3.5 w-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                </svg>
-                Downloading...
-              </>
-            ) : (
-              <>
-                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
-                </svg>
-                Download
-              </>
-            )}
-          </button>
-
-          <div className="flex items-center rounded-xl border border-gray-200 px-3 text-xs font-medium text-gray-500">
-            Backend-ranked
-          </div>
-        </div>
-      </div>
+      )}
     </div>
   );
 }
