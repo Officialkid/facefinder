@@ -109,10 +109,10 @@ def _generate_detection_variants(image_path: str) -> list[tuple[str, np.ndarray]
     return variants
 
 
-def _represent_variant(image: np.ndarray, model_name: str):
+def _represent_variant(image: np.ndarray, model_name: str, fast_mode: bool = False):
     DeepFace = _get_deepface()
-    # Fallback across detectors for maximum detection resilience
-    detectors = ["retinaface", "opencv", "ssd", "mtcnn"]
+    # In fast mode (dataset photos), use high-throughput OpenCV/SSD detectors
+    detectors = ["opencv", "ssd"] if fast_mode else ["retinaface", "opencv", "ssd", "mtcnn"]
     last_err = None
     for detector in detectors:
         try:
@@ -265,42 +265,20 @@ def match_face_in_image(
         blur_info = detect_blur(dataset_image_path)
         return False, 0.0, float("inf"), 0, blur_info
 
-    # 1. Primary evaluation on original image
+    # Fast evaluation on natural orientation with OpenCV/SSD detectors
     try:
-        embedding_objs = _represent_variant(image, model_name)
+        embedding_objs = _represent_variant(image, model_name, fast_mode=True)
         if embedding_objs:
             face_count = len(embedding_objs)
             for obj in embedding_objs:
                 candidate = np.array(obj["embedding"], dtype=np.float32)
-                dist = euclidean_distance(reference_embedding, candidate)
                 sim = cosine_similarity(reference_embedding, candidate)
-                if dist < best_distance:
-                    best_distance = dist
+                cos_dist = max(0.0, 1.0 - sim)
+                if cos_dist < best_distance:
+                    best_distance = cos_dist
                     best_similarity = sim
     except Exception as exc:
-        logger.debug("Primary scan failed for %s: %s", dataset_image_path, exc)
-
-    # 2. Fallback to rotation variants ONLY if no faces were found in original
-    if face_count == 0:
-        variants = _generate_detection_variants(dataset_image_path)
-        for variant_name, variant in variants:
-            if variant_name == "original":
-                continue
-            try:
-                embedding_objs = _represent_variant(variant, model_name)
-                if embedding_objs:
-                    face_count = max(face_count, len(embedding_objs))
-                    for obj in embedding_objs:
-                        candidate = np.array(obj["embedding"], dtype=np.float32)
-                        dist = euclidean_distance(reference_embedding, candidate)
-                        sim = cosine_similarity(reference_embedding, candidate)
-                        if dist < best_distance:
-                            best_distance = dist
-                            best_similarity = sim
-                    if face_count > 0:
-                        break
-            except Exception:
-                continue
+        logger.debug("Fast scan skipped %s (no face detected): %s", dataset_image_path, exc)
 
     blur_info = detect_blur(dataset_image_path)
     is_match = best_distance <= distance_threshold
@@ -419,7 +397,8 @@ def scan_dataset(
                     "total_images_scanned": index,
                     "current_image": Path(img_path).name,
                     "matched_count": len(matched),
-                    "stage_message": f"Scanning image {index} of {total_paths}.",
+                    "matched_items": list(matched),
+                    "stage_message": f"Scanning image {index} of {total_paths}. (Found {len(matched)} matches so far)",
                     "progress_percent": min(95, 40 + int((index / total_paths) * 55)),
                 }
             )

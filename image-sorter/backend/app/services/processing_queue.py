@@ -277,6 +277,39 @@ def _run_recognition(session: ProcessingSession) -> None:
             stage = progress_updates.get("stage")
             if isinstance(stage, str):
                 progress_updates["stage"] = ProcessingStage(stage)
+
+            matched_items_raw = progress_updates.pop("matched_items", None)
+            if matched_items_raw is not None:
+                dataset_root = Path(dataset_folder)
+                live_matched = []
+                for rank, item in enumerate(matched_items_raw, start=1):
+                    try:
+                        relative_path = Path(item["path"]).relative_to(dataset_root).as_posix()
+                    except Exception:
+                        relative_path = Path(item["path"]).name
+                    download_url = f"/api/results/{session_id}/download/{quote(relative_path, safe='')}"
+                    live_matched.append(
+                        MatchedImage(
+                            filename=item["filename"],
+                            relative_path=relative_path,
+                            similarity_score=item["similarity_score"],
+                            distance=item["distance"],
+                            download_url=download_url,
+                            preview_url=download_url,
+                            rank=rank,
+                            face_count=item.get("face_count"),
+                            confidence_percent=item["confidence_percent"],
+                            confidence_label=item["confidence_label"],
+                            match_reason=item["match_reason"],
+                            source_group=item["source_group"],
+                            blur_score=item.get("blur_score"),
+                            is_blurry=item.get("is_blurry"),
+                            blur_description=item.get("blur_description"),
+                        )
+                    )
+                progress_updates["matched_images"] = live_matched
+                progress_updates["matched_count"] = len(live_matched)
+
             _set_processing_state(session_id, **progress_updates)
 
         results = _scan_dataset_with_timeout(

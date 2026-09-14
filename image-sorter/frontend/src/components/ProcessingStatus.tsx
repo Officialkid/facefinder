@@ -23,6 +23,34 @@ const CHECKPOINTS = [
 export default function ProcessingStatus({ sessionId, onComplete, onFailed }: Props) {
   const [status, setStatus] = useState<StatusResponse | null>(null);
   const [elapsed, setElapsed] = useState(0);
+  const [confirmedMap, setConfirmedMap] = useState<Record<string, boolean>>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const stored = localStorage.getItem(`facefinder_confirmed_${sessionId}`);
+        return stored ? JSON.parse(stored) : {};
+      } catch {
+        return {};
+      }
+    }
+    return {};
+  });
+
+  const handleConfirm = (filename: string, confirmed: boolean) => {
+    setConfirmedMap((prev) => {
+      const updated = { ...prev };
+      if (updated[filename] === confirmed) {
+        delete updated[filename];
+      } else {
+        updated[filename] = confirmed;
+      }
+      if (typeof window !== "undefined") {
+        try {
+          localStorage.setItem(`facefinder_confirmed_${sessionId}`, JSON.stringify(updated));
+        } catch {}
+      }
+      return updated;
+    });
+  };
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -41,7 +69,7 @@ export default function ProcessingStatus({ sessionId, onComplete, onFailed }: Pr
 
         if (data.status === "completed") {
           clearInterval(intervalId);
-          setTimeout(() => onComplete(), 800);
+          setTimeout(() => onComplete(), 1500);
         } else if (data.status === "failed" || data.status === "expired") {
           clearInterval(intervalId);
           onFailed(data.error ?? null);
@@ -68,6 +96,10 @@ export default function ProcessingStatus({ sessionId, onComplete, onFailed }: Pr
     const s = secs % 60;
     return `${m}m ${s < 10 ? "0" : ""}${s}s`;
   };
+
+  const liveMatches = status?.matched_images || [];
+  const confirmedCount = Object.values(confirmedMap).filter((v) => v === true).length;
+  const rejectedCount = Object.values(confirmedMap).filter((v) => v === false).length;
 
   return (
     <div className="w-full flex flex-col lg:flex-row gap-6">
@@ -205,7 +237,7 @@ export default function ProcessingStatus({ sessionId, onComplete, onFailed }: Pr
           {/* Progress Bar */}
           <div className="w-full max-w-md space-y-2 mt-4">
             <div className="flex justify-between items-center text-xs font-mono">
-              <span className="text-on-surface-variant">
+              <span className="text-on-surface-variant truncate max-w-[280px]">
                 {status?.stage_message || status?.current_image || "Processing batch..."}
               </span>
               <span className="text-secondary font-bold">{progress}%</span>
@@ -233,7 +265,7 @@ export default function ProcessingStatus({ sessionId, onComplete, onFailed }: Pr
             <span className="font-mono text-[10px] uppercase text-on-surface-variant block">Matches Found</span>
             <div className="flex items-center gap-1.5 mt-1">
               <span className="font-display text-2xl font-bold text-tertiary neon-text-tertiary">
-                {status?.matched_count ?? 0}
+                {status?.matched_count ?? liveMatches.length}
               </span>
               <span className="material-symbols-outlined text-tertiary text-[16px]">check_circle</span>
             </div>
@@ -251,6 +283,132 @@ export default function ProcessingStatus({ sessionId, onComplete, onFailed }: Pr
             <p className="font-mono text-xl font-bold text-white mt-1">{formatTime(elapsed)}</p>
           </div>
         </div>
+
+        {/* Live Discovered Candidates: "Is this you?" Verification Stream */}
+        {liveMatches.length > 0 && (
+          <div className="glass-panel rounded-2xl p-5 sm:p-6 border border-tertiary/30 bg-surface-container/40 relative overflow-hidden animate-in fade-in slide-in-from-bottom-3 duration-500">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4 pb-3 border-b border-white/10">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-tertiary animate-ping" />
+                  <h3 className="font-display text-lg sm:text-xl font-bold text-white">
+                    Live Found Matches ({liveMatches.length})
+                  </h3>
+                  {confirmedCount > 0 && (
+                    <span className="px-2 py-0.5 rounded-full bg-tertiary/20 text-tertiary text-xs font-mono font-bold border border-tertiary/40">
+                      {confirmedCount} Verified
+                    </span>
+                  )}
+                  {rejectedCount > 0 && (
+                    <span className="px-2 py-0.5 rounded-full bg-error/20 text-error text-xs font-mono font-bold border border-error/40">
+                      {rejectedCount} Dismissed
+                    </span>
+                  )}
+                </div>
+                <p className="font-sans text-xs text-on-surface-variant mt-1">
+                  Confirm your photos as they are scanned. Tap <strong className="text-tertiary">Yes</strong> or <strong className="text-error">No</strong>:
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => onComplete()}
+                className="px-4 py-2 rounded-xl bg-gradient-to-r from-primary to-secondary text-on-primary text-xs font-bold font-mono flex items-center gap-1.5 shadow-md hover:brightness-110 transition-all"
+              >
+                <span>View Full Results</span>
+                <span className="material-symbols-outlined text-sm">arrow_forward</span>
+              </button>
+            </div>
+
+            {/* Scrollable Live Grid */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3.5 max-h-[440px] overflow-y-auto pr-1">
+              {liveMatches.map((item, idx) => {
+                const isConfirmed = confirmedMap[item.filename] === true;
+                const isRejected = confirmedMap[item.filename] === false;
+                const pct = item.confidence_percent || Math.round(item.similarity_score * 100);
+
+                return (
+                  <div
+                    key={item.filename || idx}
+                    className={`rounded-xl border transition-all overflow-hidden flex flex-col bg-surface-container/70 ${
+                      isConfirmed
+                        ? "border-tertiary ring-2 ring-tertiary/50 bg-tertiary/10"
+                        : isRejected
+                        ? "border-error/30 opacity-40 grayscale"
+                        : "border-white/10 hover:border-primary/50"
+                    }`}
+                  >
+                    <div className="relative aspect-square w-full bg-black/40 overflow-hidden">
+                      <img
+                        src={item.download_url}
+                        alt={item.filename}
+                        className="w-full h-full object-cover"
+                        loading="lazy"
+                      />
+                      {/* Confidence Tag */}
+                      <div className="absolute top-2 left-2 px-2 py-0.5 rounded-full bg-black/70 backdrop-blur-md border border-white/20 text-[10px] font-mono text-tertiary font-bold">
+                        {pct}% match
+                      </div>
+
+                      {isConfirmed && (
+                        <div className="absolute top-2 right-2 px-1.5 py-0.5 rounded bg-tertiary text-on-tertiary flex items-center gap-1 font-bold text-[10px] shadow-md font-mono">
+                          <span>✓ ME</span>
+                        </div>
+                      )}
+                      {isRejected && (
+                        <div className="absolute top-2 right-2 px-1.5 py-0.5 rounded bg-error text-white flex items-center gap-1 font-bold text-[10px] shadow-md font-mono">
+                          <span>✕ NOT ME</span>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="p-2.5 flex flex-col gap-2">
+                      <p className="text-[11px] font-mono text-white truncate" title={item.filename}>
+                        {item.filename}
+                      </p>
+                      <div className="flex items-center gap-1.5 pt-1 border-t border-white/10">
+                        <button
+                          type="button"
+                          onClick={() => handleConfirm(item.filename, true)}
+                          className={`flex-1 py-1 px-1.5 rounded text-[11px] font-mono font-semibold flex items-center justify-center gap-1 transition-colors ${
+                            isConfirmed
+                              ? "bg-tertiary text-on-tertiary font-bold"
+                              : "bg-tertiary/20 text-tertiary hover:bg-tertiary/30 border border-tertiary/40"
+                          }`}
+                          title="Yes, this is me"
+                        >
+                          <span>✓ Yes</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleConfirm(item.filename, false)}
+                          className={`flex-1 py-1 px-1.5 rounded text-[11px] font-mono font-semibold flex items-center justify-center gap-1 transition-colors ${
+                            isRejected
+                              ? "bg-error text-white font-bold"
+                              : "bg-white/5 text-on-surface-variant hover:bg-error/20 hover:text-error border border-white/10"
+                          }`}
+                          title="Not me"
+                        >
+                          <span>✕ No</span>
+                        </button>
+                        <a
+                          href={item.download_url}
+                          download={item.filename}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="p-1 rounded bg-white/5 hover:bg-primary/20 text-on-surface-variant hover:text-primary transition-colors"
+                          title="Download Image"
+                        >
+                          <span className="material-symbols-outlined text-[15px]">download</span>
+                        </a>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Privacy First Info Banner */}
         <div className="glass-panel rounded-xl p-4 flex items-start gap-3 border border-secondary/20 bg-secondary/5">

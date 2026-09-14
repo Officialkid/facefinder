@@ -179,6 +179,7 @@ class StatusResponse(BaseModel):
     stage_elapsed_seconds: float
     estimated_remaining_seconds: Optional[float]
     processing_time_seconds: Optional[float]
+    matched_images: List[MatchedImage] = []
     error: Optional[SessionError]
     last_updated_at: datetime
 

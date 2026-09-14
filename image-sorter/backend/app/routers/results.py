@@ -89,6 +89,7 @@ async def get_status(session_id: str):
         stage_elapsed_seconds=stage_elapsed_seconds,
         estimated_remaining_seconds=_get_estimated_remaining_seconds(session, stage_elapsed_seconds),
         processing_time_seconds=session.processing_time_seconds,
+        matched_images=session.matched_images or [],
         error=session.error,
         last_updated_at=session.last_updated_at,
     )

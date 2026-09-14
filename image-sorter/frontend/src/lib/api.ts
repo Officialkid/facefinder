@@ -99,6 +99,7 @@ export interface StatusResponse {
   stage_elapsed_seconds: number;
   estimated_remaining_seconds: number | null;
   processing_time_seconds: number | null;
+  matched_images?: MatchedImage[];
   error: SessionError | null;
   last_updated_at: string;
 }

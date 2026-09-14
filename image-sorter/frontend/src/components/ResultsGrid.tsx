@@ -19,7 +19,17 @@ export default function ResultsGrid({ sessionId, referencePreview, onReset }: Pr
   const [sortMode, setSortMode] = useState<SortMode>("similarity");
   const [filterMode, setFilterMode] = useState<FilterMode>("all");
   const [selectedMatch, setSelectedMatch] = useState<MatchedImage | null>(null);
-  const [confirmedMatches, setConfirmedMatches] = useState<Record<string, boolean>>({});
+  const [confirmedMatches, setConfirmedMatches] = useState<Record<string, boolean>>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const stored = localStorage.getItem(`facefinder_confirmed_${sessionId}`);
+        return stored ? JSON.parse(stored) : {};
+      } catch {
+        return {};
+      }
+    }
+    return {};
+  });
 
   useEffect(() => {
     const fetchResults = async () => {
@@ -41,16 +51,17 @@ export default function ResultsGrid({ sessionId, referencePreview, onReset }: Pr
 
     let list = [...results.matched_images];
 
-    // Filter
+    // Filter by similarity threshold
     if (filterMode === "80") {
-      list = list.filter((m) => (1 - m.similarity_score) >= 0.8);
+      list = list.filter((m) => m.similarity_score >= 0.80 || m.confidence_percent >= 80);
     } else if (filterMode === "70") {
-      list = list.filter((m) => (1 - m.similarity_score) >= 0.7);
+      list = list.filter((m) => m.similarity_score >= 0.70 || m.confidence_percent >= 70);
     }
 
     // Sort
     if (sortMode === "similarity") {
-      list.sort((a, b) => a.similarity_score - b.similarity_score);
+      // Highest similarity (best match) first
+      list.sort((a, b) => b.similarity_score - a.similarity_score);
     } else if (sortMode === "filename") {
       list.sort((a, b) => a.filename.localeCompare(b.filename));
     }
@@ -60,24 +71,32 @@ export default function ResultsGrid({ sessionId, referencePreview, onReset }: Pr
 
   const topMatchPercent = useMemo(() => {
     if (!results?.matched_images?.length) return 0;
-    const bestDist = Math.min(...results.matched_images.map((m) => m.similarity_score));
-    return Math.round((1 - bestDist) * 100);
+    const bestSim = Math.max(...results.matched_images.map((m) => m.similarity_score));
+    return Math.round(bestSim * 100);
   }, [results]);
 
   const avgMatchPercent = useMemo(() => {
     if (!results?.matched_images?.length) return 0;
-    const avgDist =
+    const avgSim =
       results.matched_images.reduce((acc, m) => acc + m.similarity_score, 0) /
       results.matched_images.length;
-    return Math.round((1 - avgDist) * 100);
+    return Math.round(avgSim * 100);
   }, [results]);
 
   const handleToggleConfirm = (filename: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
-    setConfirmedMatches((prev) => ({
-      ...prev,
-      [filename]: !prev[filename],
-    }));
+    setConfirmedMatches((prev) => {
+      const next = {
+        ...prev,
+        [filename]: !prev[filename],
+      };
+      if (typeof window !== "undefined") {
+        try {
+          localStorage.setItem(`facefinder_confirmed_${sessionId}`, JSON.stringify(next));
+        } catch {}
+      }
+      return next;
+    });
   };
 
   const handleDownloadAll = () => {
@@ -414,13 +433,13 @@ export default function ResultsGrid({ sessionId, referencePreview, onReset }: Pr
                 <div>
                   <span className="font-mono text-[10px] text-outline uppercase block">Cosine Distance</span>
                   <span className="font-mono text-base font-bold text-secondary">
-                    {selectedMatch.similarity_score.toFixed(4)}
+                    {selectedMatch.distance !== undefined ? selectedMatch.distance.toFixed(4) : (1 - selectedMatch.similarity_score).toFixed(4)}
                   </span>
                 </div>
                 <div>
-                  <span className="font-mono text-[10px] text-outline uppercase block">Confidence</span>
+                  <span className="font-mono text-[10px] text-outline uppercase block">Match Confidence</span>
                   <span className="font-mono text-base font-bold text-tertiary neon-text-tertiary">
-                    {Math.round((1 - selectedMatch.similarity_score) * 100)}%
+                    {selectedMatch.confidence_percent ?? Math.round(selectedMatch.similarity_score * 100)}%
                   </span>
                 </div>
                 <div>
