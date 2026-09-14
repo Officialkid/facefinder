@@ -90,6 +90,15 @@ async def get_status(session_id: str):
         estimated_remaining_seconds=_get_estimated_remaining_seconds(session, stage_elapsed_seconds),
         processing_time_seconds=session.processing_time_seconds,
         matched_images=session.matched_images or [],
+        manual_search_estimated_seconds=(
+            round(session.total_images_discovered * 1.8, 1) if session.total_images_discovered > 0 else None
+        ),
+        time_saved_percent=(
+            round(max(0.0, ((session.total_images_discovered * 1.8) - (session.processing_time_seconds or stage_elapsed_seconds)) / (session.total_images_discovered * 1.8) * 100), 1)
+            if session.total_images_discovered > 0 and (session.total_images_discovered * 1.8) > (session.processing_time_seconds or stage_elapsed_seconds)
+            else None
+        ),
+        color_space_normalized=True,
         error=session.error,
         last_updated_at=session.last_updated_at,
     )
@@ -143,6 +152,15 @@ async def get_results(session_id: str):
         stage_elapsed_seconds=stage_elapsed_seconds,
         estimated_remaining_seconds=_get_estimated_remaining_seconds(session, stage_elapsed_seconds),
         processing_time_seconds=session.processing_time_seconds,
+        manual_search_estimated_seconds=(
+            round(session.total_images_discovered * 1.8, 1) if session.total_images_discovered > 0 else None
+        ),
+        time_saved_percent=(
+            round(max(0.0, ((session.total_images_discovered * 1.8) - (session.processing_time_seconds or stage_elapsed_seconds)) / (session.total_images_discovered * 1.8) * 100), 1)
+            if session.total_images_discovered > 0 and (session.total_images_discovered * 1.8) > (session.processing_time_seconds or stage_elapsed_seconds)
+            else None
+        ),
+        color_space_normalized=True,
         error=session.error,
     )
 

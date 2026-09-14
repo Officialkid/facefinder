@@ -180,6 +180,9 @@ class StatusResponse(BaseModel):
     estimated_remaining_seconds: Optional[float]
     processing_time_seconds: Optional[float]
     matched_images: List[MatchedImage] = []
+    manual_search_estimated_seconds: Optional[float] = None
+    time_saved_percent: Optional[float] = None
+    color_space_normalized: bool = True
     error: Optional[SessionError]
     last_updated_at: datetime
 
@@ -214,6 +217,9 @@ class ResultsResponse(BaseModel):
     stage_elapsed_seconds: float
     estimated_remaining_seconds: Optional[float]
     processing_time_seconds: Optional[float]
+    manual_search_estimated_seconds: Optional[float] = None
+    time_saved_percent: Optional[float] = None
+    color_space_normalized: bool = True
     error: Optional[SessionError]
 
 

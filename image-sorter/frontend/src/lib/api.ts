@@ -100,6 +100,9 @@ export interface StatusResponse {
   estimated_remaining_seconds: number | null;
   processing_time_seconds: number | null;
   matched_images?: MatchedImage[];
+  manual_search_estimated_seconds?: number | null;
+  time_saved_percent?: number | null;
+  color_space_normalized?: boolean;
   error: SessionError | null;
   last_updated_at: string;
 }
@@ -149,6 +152,9 @@ export interface ResultsResponse {
   stage_elapsed_seconds: number;
   estimated_remaining_seconds: number | null;
   processing_time_seconds: number | null;
+  manual_search_estimated_seconds?: number | null;
+  time_saved_percent?: number | null;
+  color_space_normalized?: boolean;
   error: SessionError | null;
 }
 

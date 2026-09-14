@@ -112,7 +112,7 @@ def _generate_detection_variants(image_path: str) -> list[tuple[str, np.ndarray]
 def _represent_variant(image: np.ndarray, model_name: str, fast_mode: bool = False):
     DeepFace = _get_deepface()
     # In fast mode (dataset photos), use high-throughput OpenCV/SSD detectors
-    detectors = ["opencv", "ssd"] if fast_mode else ["retinaface", "opencv", "ssd", "mtcnn"]
+    detectors = ["opencv", "ssd"] if fast_mode else ["ssd", "opencv", "mtcnn"]
     last_err = None
     for detector in detectors:
         try:
@@ -145,7 +145,7 @@ def detect_blur(image_path: str) -> dict:
     lap_var = cv2.Laplacian(gray, cv2.CV_64F).var()
 
     # Thresholds tuned for face photos (frontal, ~640px+ faces)
-    # Very sharp: > 500, Acceptable: 150-500, Blurry: 50-150, Very blurry: < 50
+    # Very sharp: > 400, Acceptable: 150-500, Blurry: 50-150, Very blurry: < 50
     if lap_var >= 400:
         description = "Sharp and clear."
         is_blurry = False
@@ -169,6 +169,8 @@ def detect_blur(image_path: str) -> dict:
 def extract_embedding(image_path: str, model_name: str = "ArcFace") -> Optional[np.ndarray]:
     """
     Detect face and extract facial embedding from a reference image.
+    Supports single faces, and in multi-face reference photos (e.g. speaking at events),
+    automatically selects the dominant foreground subject if clearly prominent.
     Returns a 1-D numpy array (embedding vector) or None if no face found.
     """
     variants = _generate_detection_variants(image_path)
@@ -181,10 +183,30 @@ def extract_embedding(image_path: str, model_name: str = "ArcFace") -> Optional[
             embedding_objs = _represent_variant(variant, model_name)
             if embedding_objs:
                 if len(embedding_objs) > 1:
+                    # Sort detected faces by bounding box area (w * h)
+                    embedding_objs.sort(
+                        key=lambda x: x["facial_area"]["w"] * x["facial_area"]["h"],
+                        reverse=True,
+                    )
+                    a0 = embedding_objs[0]["facial_area"]["w"] * embedding_objs[0]["facial_area"]["h"]
+                    a1 = embedding_objs[1]["facial_area"]["w"] * embedding_objs[1]["facial_area"]["h"]
+                    total_a = sum(obj["facial_area"]["w"] * obj["facial_area"]["h"] for obj in embedding_objs)
+
+                    # If the largest face is clearly the dominant foreground subject
+                    # (at least 1.8x larger than background faces or > 55% of total face area), select it!
+                    if (a0 >= 1.8 * a1) or (a0 / max(total_a, 1) >= 0.55):
+                        logger.info(
+                            "Dominant foreground face selected from reference image (area ratio: %.1fx vs secondary).",
+                            a0 / max(a1, 1),
+                        )
+                        embedding = np.array(embedding_objs[0]["embedding"], dtype=np.float32)
+                        return embedding
+
                     raise FaceRecognitionError(
                         ErrorCode.TOO_MANY_FACES,
-                        "Multiple faces were detected in the reference image. Please upload a photo with only one clear face.",
+                        "Multiple equally prominent faces were detected in the reference image. Please upload a photo with only yourself or crop it to focus on your face.",
                     )
+
                 embedding = np.array(embedding_objs[0]["embedding"], dtype=np.float32)
                 logger.info(
                     "Embedding extracted from reference image (%s variant, %s-D).",

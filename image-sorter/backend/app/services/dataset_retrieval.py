@@ -195,7 +195,120 @@ def _normalize_candidate_url(raw_url: str, base_url: str) -> Optional[str]:
     return candidate
 
 
+def _extract_pixieset_image_urls(page_html: str, base_url: str) -> list[str]:
+    """
+    Extract full-resolution photo URLs from a Pixieset gallery using its client API.
+    Pixieset embeds collectionId, collectionUrlKey, and galleries in the page scripts,
+    then dynamically retrieves photo objects from /client/loadphotos/.
+    """
+    import json
+    import urllib.parse
+
+    candidates: list[str] = []
+
+    cid_match = re.search(r"'collectionId':\s*(\d+)", page_html)
+    cuk_match = re.search(r"'collectionUrlKey':\s*['\"]([^'\"]+)['\"]", page_html)
+    base_url_match = re.search(r"'baseUrl':\s*['\"]([^'\"]+)['\"]", page_html)
+
+    if not (cid_match and cuk_match):
+        return []
+
+    collection_id = int(cid_match.group(1))
+    collection_url_key = cuk_match.group(1)
+
+    parsed_base = urlparse(base_url)
+    origin = f"{parsed_base.scheme}://{parsed_base.netloc}/"
+    if base_url_match:
+        try:
+            raw_b = base_url_match.group(1).encode("utf-8").decode("unicode_escape")
+            if raw_b.startswith("http"):
+                origin = raw_b if raw_b.endswith("/") else raw_b + "/"
+        except Exception:
+            pass
+
+    path_parts = [p for p in parsed_base.path.split("/") if p]
+    target_slug = None
+    if len(path_parts) >= 2 and path_parts[0] == collection_url_key:
+        target_slug = path_parts[1]
+
+    galleries = []
+    galleries_match = re.search(r"'allGalleries':\s*(\[\{.*?\}\])", page_html)
+    if galleries_match:
+        try:
+            raw_gal = galleries_match.group(1).replace("'", '"')
+            gal_data = json.loads(raw_gal)
+            galleries = [g.get("slug") for g in gal_data if g.get("slug")]
+        except Exception:
+            pass
+
+    if target_slug:
+        galleries_to_fetch = [target_slug]
+    elif galleries:
+        galleries_to_fetch = galleries
+    else:
+        current_g_match = re.search(r"'currentGallery':\s*['\"]([^'\"]+)['\"]", page_html)
+        galleries_to_fetch = [current_g_match.group(1)] if current_g_match else [""]
+
+    api_endpoint = urljoin(origin, "client/loadphotos/")
+    for slug in galleries_to_fetch:
+        if len(candidates) >= MAX_GALLERY_IMAGE_COUNT:
+            break
+        params = {
+            "cuk": collection_url_key,
+            "cid": collection_id,
+            "gs": slug,
+            "page": 0,
+            "all": 1,
+        }
+        req_url = f"{api_endpoint}?{urllib.parse.urlencode(params)}"
+        req = urllib.request.Request(
+            req_url,
+            headers={
+                "User-Agent": REQUEST_HEADERS["User-Agent"],
+                "Referer": base_url,
+                "X-Requested-With": "XMLHttpRequest",
+                "Accept": "application/json, text/javascript, */*; q=0.01",
+            },
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=DOWNLOAD_TIMEOUT_SECONDS) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+                if data.get("status") == "success" and data.get("content"):
+                    photos = json.loads(data["content"])
+                    for p in photos:
+                        raw_img_url = (
+                            p.get("pathXlarge")
+                            or p.get("pathXxlarge")
+                            or p.get("pathLarge")
+                            or p.get("pathMedium")
+                        )
+                        if not raw_img_url:
+                            continue
+                        if raw_img_url.startswith("//"):
+                            full_img_url = "https:" + raw_img_url
+                        elif raw_img_url.startswith("http"):
+                            full_img_url = raw_img_url
+                        else:
+                            full_img_url = urljoin(origin, raw_img_url)
+                        if full_img_url not in candidates:
+                            candidates.append(full_img_url)
+                        if len(candidates) >= MAX_GALLERY_IMAGE_COUNT:
+                            break
+        except Exception as exc:
+            logger.warning("Failed to fetch Pixieset gallery slug '%s': %s", slug, exc)
+            continue
+
+    return candidates
+
+
 def _extract_gallery_image_urls(page_html: str, base_url: str) -> list[str]:
+    # Check Pixieset API extraction first
+    if "pixieset.com" in base_url.lower():
+        pixieset_urls = _extract_pixieset_image_urls(page_html, base_url)
+        if pixieset_urls:
+            logger.info("Discovered %d photos via Pixieset client API for %s", len(pixieset_urls), base_url)
+            return pixieset_urls
+
     candidates: list[str] = []
     patterns = [
         r"""(?:src|content|data-src|data-large-src)=["']([^"']+)["']""",
