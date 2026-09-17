@@ -20,12 +20,14 @@ export default function Home() {
   const [step, setStep] = useState<AppStep>(1);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [referencePreview, setReferencePreview] = useState<string | null>(null);
+  const [selectedFaceIndex, setSelectedFaceIndex] = useState<number | null>(null);
   const [failError, setFailError] = useState<SessionErrorDisplay | null>(null);
   const [showPricing, setShowPricing] = useState(false);
 
-  const handleUploadSuccess = useCallback((result: UploadResponse, preview: string) => {
+  const handleUploadSuccess = useCallback((result: UploadResponse, preview: string, faceIndex?: number | null) => {
     setSessionId(result.session_id);
     setReferencePreview(preview);
+    setSelectedFaceIndex(faceIndex ?? 0);
     setFailError(null);
     setStep(2);
   }, []);
@@ -154,6 +156,7 @@ export default function Home() {
             <DatasetForm
               sessionId={sessionId}
               referencePreview={referencePreview}
+              selectedFaceIndex={selectedFaceIndex}
               onStarted={handleProcessingStarted}
               onBack={() => setStep(1)}
             />

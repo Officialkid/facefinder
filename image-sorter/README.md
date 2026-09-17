@@ -243,6 +243,14 @@ To test without a real event dataset, you can:
 
 ---
 
+## What is Still Remaining (Next Steps / Roadmap)
+
+- **Live Production Deployment Credentials**: The Docker container and Vercel configurations are ready; the only remaining deployment step is connecting the active cloud deployment tokens (Vercel and Google Cloud / Cloud Run).
+- **GPU Acceleration & Vector Database Scaling**: Transitioning the vector search from in-memory CPU NumPy arrays to a GPU-accelerated vector index (such as FAISS or Qdrant/Milvus) to search galleries of 50,000+ photos in sub-second time.
+- **Permanent Multi-Tenant User Accounts**: Adding database-backed user authentication (PostgreSQL/Supabase) to persist albums and search history permanently across sessions.
+
+---
+
 ## Limitations
 
 - Processing speed depends on dataset size and available CPU/GPU
@@ -253,3 +261,4 @@ To test without a real event dataset, you can:
 ---
 
 *Submitted in partial fulfillment of the requirements for the award of BSc Information Technology, JKUAT, 2026.*
+

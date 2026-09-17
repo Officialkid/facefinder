@@ -8,11 +8,12 @@ from fastapi.responses import FileResponse
 from pathlib import Path
 import logging
 
-from app.models.schemas import ProcessingSession, SessionStatus
+from app.models.schemas import ProcessingSession, SessionStatus, FaceDetectionItem
 from app.services.rate_limiter import RateLimitExceeded, enforce_rate_limit
 from app.services.security import validate_upload_content
 from app.services.session_store import create_session, get_session
 from app.services.dataset_retrieval import get_session_temp_dir
+from app.services.face_recognition import detect_reference_faces
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -75,14 +76,25 @@ async def upload_reference_image(request: Request, file: UploadFile = File(...))
 
     session.reference_image_path = str(ref_path)
     session.progress_percent = 0
+
+    # Detect faces in reference image for instant user disambiguation
+    detected_faces = []
+    try:
+        raw_faces = detect_reference_faces(str(ref_path))
+        detected_faces = [FaceDetectionItem(**f) for f in raw_faces]
+        session.detected_reference_faces = detected_faces
+    except Exception as exc:
+        logger.warning("Failed detecting reference faces on upload: %s", exc)
+
     create_session(session)
 
-    logger.info(f"Reference image uploaded. Session: {session.session_id}")
+    logger.info(f"Reference image uploaded ({len(detected_faces)} faces detected). Session: {session.session_id}")
     return {
         "session_id": session.session_id,
         "status": session.status,
         "message": "Reference image uploaded successfully. Proceed to /api/process/start",
         "reference_image": file.filename,
+        "detected_faces": [f.model_dump() for f in detected_faces],
     }
 
 

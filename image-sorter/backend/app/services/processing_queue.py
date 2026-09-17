@@ -213,6 +213,7 @@ def _scan_dataset_with_timeout(
     dataset_folder: str,
     model_name: str,
     distance_threshold: float,
+    selected_face_index: Optional[int] = None,
     progress_callback,
 ) -> dict:
     with ThreadPoolExecutor(max_workers=1) as scan_executor:
@@ -222,6 +223,7 @@ def _scan_dataset_with_timeout(
             dataset_folder,
             model_name,
             distance_threshold,
+            selected_face_index,
             progress_callback,
         )
         try:
@@ -278,9 +280,9 @@ def _run_recognition(session: ProcessingSession) -> None:
             if isinstance(stage, str):
                 progress_updates["stage"] = ProcessingStage(stage)
 
+            dataset_root = Path(dataset_folder)
             matched_items_raw = progress_updates.pop("matched_items", None)
             if matched_items_raw is not None:
-                dataset_root = Path(dataset_folder)
                 live_matched = []
                 for rank, item in enumerate(matched_items_raw, start=1):
                     try:
@@ -305,10 +307,43 @@ def _run_recognition(session: ProcessingSession) -> None:
                             blur_score=item.get("blur_score"),
                             is_blurry=item.get("is_blurry"),
                             blur_description=item.get("blur_description"),
+                            match_tier="confirmed",
                         )
                     )
                 progress_updates["matched_images"] = live_matched
                 progress_updates["matched_count"] = len(live_matched)
+
+            candidate_items_raw = progress_updates.pop("candidate_items", None)
+            if candidate_items_raw is not None:
+                live_cand = []
+                for rank, item in enumerate(candidate_items_raw, start=1):
+                    try:
+                        relative_path = Path(item["path"]).relative_to(dataset_root).as_posix()
+                    except Exception:
+                        relative_path = Path(item["path"]).name
+                    download_url = f"/api/results/{session_id}/download/{quote(relative_path, safe='')}"
+                    live_cand.append(
+                        MatchedImage(
+                            filename=item["filename"],
+                            relative_path=relative_path,
+                            similarity_score=item["similarity_score"],
+                            distance=item["distance"],
+                            download_url=download_url,
+                            preview_url=download_url,
+                            rank=rank,
+                            face_count=item.get("face_count"),
+                            confidence_percent=item["confidence_percent"],
+                            confidence_label=item["confidence_label"],
+                            match_reason=item["match_reason"],
+                            source_group=item["source_group"],
+                            blur_score=item.get("blur_score"),
+                            is_blurry=item.get("is_blurry"),
+                            blur_description=item.get("blur_description"),
+                            match_tier="candidate",
+                        )
+                    )
+                progress_updates["candidate_images"] = live_cand
+                progress_updates["candidate_count"] = len(live_cand)
 
             _set_processing_state(session_id, **progress_updates)
 
@@ -317,13 +352,14 @@ def _run_recognition(session: ProcessingSession) -> None:
             reference_image_path=session.reference_image_path or "",
             dataset_folder=dataset_folder,
             model_name=session.requested_model_name or "ArcFace",
-            distance_threshold=session.requested_similarity_threshold or 0.4,
+            distance_threshold=session.requested_similarity_threshold or 0.45,
+            selected_face_index=session.selected_face_index,
             progress_callback=on_progress,
         )
 
         dataset_root = Path(dataset_folder)
         matched_images = []
-        for rank, item in enumerate(results["matched"], start=1):
+        for rank, item in enumerate(results.get("matched", []), start=1):
             relative_path = Path(item["path"]).relative_to(dataset_root).as_posix()
             download_url = f"/api/results/{session_id}/download/{quote(relative_path, safe='')}"
             matched_images.append(
@@ -343,14 +379,42 @@ def _run_recognition(session: ProcessingSession) -> None:
                     blur_score=item.get("blur_score"),
                     is_blurry=item.get("is_blurry"),
                     blur_description=item.get("blur_description"),
+                    match_tier="confirmed",
+                )
+            )
+
+        candidate_images = []
+        for rank, item in enumerate(results.get("candidates", []), start=len(matched_images) + 1):
+            relative_path = Path(item["path"]).relative_to(dataset_root).as_posix()
+            download_url = f"/api/results/{session_id}/download/{quote(relative_path, safe='')}"
+            candidate_images.append(
+                MatchedImage(
+                    filename=item["filename"],
+                    relative_path=relative_path,
+                    similarity_score=item["similarity_score"],
+                    distance=item["distance"],
+                    download_url=download_url,
+                    preview_url=download_url,
+                    rank=rank,
+                    face_count=item.get("face_count"),
+                    confidence_percent=item["confidence_percent"],
+                    confidence_label=item["confidence_label"],
+                    match_reason=item["match_reason"],
+                    source_group=item["source_group"],
+                    blur_score=item.get("blur_score"),
+                    is_blurry=item.get("is_blurry"),
+                    blur_description=item.get("blur_description"),
+                    match_tier="candidate",
                 )
             )
 
         session = get_session(session_id) or session
         session.matched_images = matched_images
+        session.candidate_images = candidate_images
         session.total_images_scanned = results["total_scanned"]
         session.total_images_discovered = results["total_discovered"]
         session.matched_count = len(matched_images)
+        session.candidate_count = len(candidate_images)
         session.images_with_detected_faces = results["images_with_detected_faces"]
         session.images_without_detected_faces = results["images_without_detected_faces"]
         session.images_with_multiple_faces = results["images_with_multiple_faces"]

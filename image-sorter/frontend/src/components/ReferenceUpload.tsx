@@ -1,11 +1,9 @@
-"use client";
-
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useDropzone } from "react-dropzone";
-import { ImageSorterAPI, UploadResponse } from "@/lib/api";
+import { ImageSorterAPI, UploadResponse, DetectedReferenceFace } from "@/lib/api";
 
 interface Props {
-  onSuccess: (result: UploadResponse, previewUrl: string) => void;
+  onSuccess: (result: UploadResponse, previewUrl: string, selectedFaceIndex?: number | null) => void;
 }
 
 export default function ReferenceUpload({ onSuccess }: Props) {
@@ -13,11 +11,16 @@ export default function ReferenceUpload({ onSuccess }: Props) {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [detectedFaces, setDetectedFaces] = useState<DetectedReferenceFace[] | null>(null);
+  const [selectedFaceIdx, setSelectedFaceIdx] = useState<number>(0);
+  const [pendingUploadResult, setPendingUploadResult] = useState<UploadResponse | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleSelectedFile = useCallback((file: File) => {
     setError(null);
     setSelectedFile(file);
+    setDetectedFaces(null);
+    setPendingUploadResult(null);
 
     const reader = new FileReader();
     reader.onload = (e) => {
@@ -54,7 +57,13 @@ export default function ReferenceUpload({ onSuccess }: Props) {
 
     try {
       const result = await ImageSorterAPI.uploadReference(selectedFile);
-      onSuccess(result, preview!);
+      if (result.detected_faces && result.detected_faces.length > 1) {
+        setDetectedFaces(result.detected_faces);
+        setSelectedFaceIdx(0);
+        setPendingUploadResult(result);
+      } else {
+        onSuccess(result, preview!, 0);
+      }
     } catch (err: any) {
       const msg = err?.response?.data?.detail ?? "Upload failed. Please check your image and try again.";
       setError(msg);
@@ -231,6 +240,80 @@ export default function ReferenceUpload({ onSuccess }: Props) {
                 <span className="px-2.5 py-1 rounded-md bg-surface-variant text-[11px] font-mono text-on-surface-variant">Max 10MB</span>
               </div>
             </div>
+          ) : detectedFaces && detectedFaces.length > 1 ? (
+            <div className="w-full bg-slate-900/80 border border-primary/40 rounded-2xl p-6 flex flex-col items-center space-y-6 shadow-2xl animate-in fade-in zoom-in-95">
+              <div className="text-center space-y-1">
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-mono font-semibold bg-primary/20 border border-primary/40 text-primary">
+                  <span className="material-symbols-outlined text-sm">group</span>
+                  <span>{detectedFaces.length} Faces Detected in Photo</span>
+                </div>
+                <h3 className="font-headline font-bold text-white text-lg pt-1">
+                  Which person are you searching for?
+                </h3>
+                <p className="text-xs text-on-surface-variant max-w-md mx-auto">
+                  Click on the person you want to locate across the event gallery.
+                </p>
+              </div>
+
+              {/* Grid of detected faces */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 w-full max-w-lg">
+                {detectedFaces.map((f) => {
+                  const isSelected = selectedFaceIdx === f.face_index;
+                  return (
+                    <button
+                      key={f.face_index}
+                      type="button"
+                      onClick={() => setSelectedFaceIdx(f.face_index)}
+                      className={`relative p-3 rounded-2xl border flex flex-col items-center gap-2 transition-all cursor-pointer ${
+                        isSelected
+                          ? "border-primary bg-primary/20 shadow-lg shadow-primary/30 ring-2 ring-primary scale-105"
+                          : "border-white/10 bg-surface-variant/40 hover:border-white/30 hover:bg-surface-variant/60"
+                      }`}
+                    >
+                      <img
+                        src={f.thumbnail_base64}
+                        alt={`Person ${f.face_index + 1}`}
+                        className="w-20 h-20 rounded-full object-cover border border-white/20 shadow"
+                      />
+                      <span className="font-mono text-xs font-bold text-white">
+                        Person {f.face_index + 1}
+                      </span>
+                      {isSelected ? (
+                        <div className="w-5 h-5 rounded-full bg-primary text-white flex items-center justify-center text-[12px] shadow">
+                          ✓
+                        </div>
+                      ) : (
+                        <div className="w-5 h-5 rounded-full border border-white/20 bg-surface text-transparent flex items-center justify-center text-[10px]">
+                          ○
+                        </div>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="flex w-full justify-between items-center gap-4 pt-2">
+                <button
+                  type="button"
+                  onClick={handleClear}
+                  className="text-xs font-mono text-outline hover:text-white transition-colors"
+                >
+                  Choose Different Photo
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (pendingUploadResult) {
+                      onSuccess(pendingUploadResult, preview!, selectedFaceIdx);
+                    }
+                  }}
+                  className="gradient-button text-white px-8 py-3 rounded-lg font-mono text-xs font-bold shadow-lg shadow-primary/20 hover:shadow-primary/40 active:scale-95 transition-all flex items-center gap-2"
+                >
+                  <span>Confirm Person {selectedFaceIdx + 1} &amp; Proceed</span>
+                  <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
+                </button>
+              </div>
+            </div>
           ) : (
             <div className="w-full bg-slate-900/60 border border-secondary/40 rounded-xl p-6 flex flex-col items-center space-y-4">
               <div className="relative w-44 h-44 rounded-2xl overflow-hidden border-2 border-secondary shadow-[0_0_20px_rgba(76,215,246,0.3)]">
@@ -260,27 +343,29 @@ export default function ReferenceUpload({ onSuccess }: Props) {
             </div>
           )}
 
-          {/* Action CTA Button */}
-          <div className="mt-8 flex justify-end">
-            <button
-              type="button"
-              onClick={handleUpload}
-              disabled={!selectedFile || uploading}
-              className="w-full sm:w-auto gradient-button text-white px-8 py-3 rounded-lg font-mono text-xs font-bold shadow-lg shadow-primary/20 hover:shadow-primary/40 active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-40 disabled:pointer-events-none"
-            >
-              {uploading ? (
-                <>
-                  <div className="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin" />
-                  <span>Extracting 512-D Vectors...</span>
-                </>
-              ) : (
-                <>
-                  <span>Confirm &amp; Proceed to Dataset Link</span>
-                  <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
-                </>
-              )}
-            </button>
-          </div>
+          {/* Action CTA Button for single face */}
+          {(!detectedFaces || detectedFaces.length <= 1) && (
+            <div className="mt-8 flex justify-end">
+              <button
+                type="button"
+                onClick={handleUpload}
+                disabled={!selectedFile || uploading}
+                className="w-full sm:w-auto gradient-button text-white px-8 py-3 rounded-lg font-mono text-xs font-bold shadow-lg shadow-primary/20 hover:shadow-primary/40 active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-40 disabled:pointer-events-none"
+              >
+                {uploading ? (
+                  <>
+                    <div className="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin" />
+                    <span>Detecting Faces &amp; Vectors...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>Confirm &amp; Proceed to Dataset Link</span>
+                    <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
+                  </>
+                )}
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>

@@ -56,3 +56,7 @@ image-sorter/frontend/.tmp-imagesorter*.log
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# scratch / local test runs
+scratch/
+

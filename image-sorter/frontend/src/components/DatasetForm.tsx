@@ -7,14 +7,15 @@ import { ImageSorterAPI, RecognitionModel } from "@/lib/api";
 interface Props {
   sessionId: string;
   referencePreview: string;
+  selectedFaceIndex?: number | null;
   onStarted: () => void;
   onBack: () => void;
 }
 
-export default function DatasetForm({ sessionId, referencePreview, onStarted, onBack }: Props) {
+export default function DatasetForm({ sessionId, referencePreview, selectedFaceIndex, onStarted, onBack }: Props) {
   const [sourceMode, setSourceMode] = useState<"url" | "zip">("url");
   const [datasetUrl, setDatasetUrl] = useState("");
-  const [threshold, setThreshold] = useState(0.4);
+  const [threshold, setThreshold] = useState(0.45);
   const [modelName, setModelName] = useState<RecognitionModel>("ArcFace");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -85,7 +86,8 @@ export default function DatasetForm({ sessionId, referencePreview, onStarted, on
         sessionId,
         datasetUrl.trim(),
         threshold,
-        modelName
+        modelName,
+        selectedFaceIndex
       );
       onStarted();
     } catch (err: any) {

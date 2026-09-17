@@ -111,8 +111,8 @@ def _generate_detection_variants(image_path: str) -> list[tuple[str, np.ndarray]
 
 def _represent_variant(image: np.ndarray, model_name: str, fast_mode: bool = False):
     DeepFace = _get_deepface()
-    # High-throughput OpenCV and SSD detectors execute in milliseconds
-    detectors = ["opencv", "ssd"] if fast_mode else ["opencv", "ssd", "mtcnn"]
+    # In fast mode: start with opencv & ssd for 10ms throughput; gracefully fall back to mtcnn for sunglasses/occlusions
+    detectors = ["opencv", "ssd", "mtcnn"] if fast_mode else ["mtcnn", "ssd", "opencv"]
     last_err = None
     for detector in detectors:
         try:
@@ -127,6 +127,74 @@ def _represent_variant(image: np.ndarray, model_name: str, fast_mode: bool = Fal
             continue
     if last_err:
         raise last_err
+
+
+def detect_reference_faces(image_path: str) -> list[dict]:
+    """
+    Detect all faces in a reference image and return bounding boxes and base64 thumbnails.
+    Enables user disambiguation when multiple people appear in the reference photo.
+    """
+    import base64
+    DeepFace = _get_deepface()
+    cv2 = _get_cv2()
+    img = cv2.imread(image_path)
+    if img is None:
+        return []
+
+    h_img, w_img = img.shape[:2]
+
+    # MTCNN provides reliable landmark alignment even through sunglasses and varied lighting
+    faces = []
+    for detector in ["mtcnn", "ssd", "opencv"]:
+        try:
+            extracted = DeepFace.extract_faces(
+                img_path=img,
+                detector_backend=detector,
+                enforce_detection=True,
+            )
+            if extracted:
+                faces = extracted
+                break
+        except Exception:
+            continue
+
+    results = []
+    for idx, face_obj in enumerate(faces):
+        area = face_obj.get("facial_area", {})
+        x = max(0, area.get("x", 0))
+        y = max(0, area.get("y", 0))
+        w = area.get("w", 0)
+        h = area.get("h", 0)
+
+        # Pad bounding box by 25% for a nice portrait avatar
+        pad_x = int(w * 0.25)
+        pad_y = int(h * 0.25)
+        x1 = max(0, x - pad_x)
+        y1 = max(0, y - pad_y)
+        x2 = min(w_img, x + w + pad_x)
+        y2 = min(h_img, y + h + pad_y)
+
+        crop = img[y1:y2, x1:x2]
+        if crop.size == 0:
+            continue
+
+        thumb = cv2.resize(crop, (160, 160), interpolation=cv2.INTER_AREA)
+        _, buf = cv2.imencode(".jpg", thumb, [int(cv2.IMWRITE_JPEG_QUALITY), 88])
+        b64_thumb = "data:image/jpeg;base64," + base64.b64encode(buf).decode("utf-8")
+
+        results.append({
+            "face_index": idx,
+            "confidence": round(float(face_obj.get("confidence", 1.0)), 3),
+            "bounding_box": {"x": x, "y": y, "w": w, "h": h},
+            "thumbnail_base64": b64_thumb,
+        })
+
+    # Sort left-to-right based on x position for intuitive visual ordering
+    results.sort(key=lambda item: item["bounding_box"]["x"])
+    for idx, item in enumerate(results):
+        item["face_index"] = idx
+
+    return results
 
 
 def detect_blur(image_path: str) -> dict:
@@ -166,13 +234,52 @@ def detect_blur(image_path: str) -> dict:
     }
 
 
-def extract_embedding(image_path: str, model_name: str = "ArcFace") -> Optional[np.ndarray]:
+def extract_embedding(
+    image_path: str,
+    model_name: str = "ArcFace",
+    target_face_index: Optional[int] = None,
+) -> Optional[np.ndarray]:
     """
     Detect face and extract facial embedding from a reference image.
-    Supports single faces, and in multi-face reference photos (e.g. speaking at events),
-    automatically selects the dominant foreground subject if clearly prominent.
-    Returns a 1-D numpy array (embedding vector) or None if no face found.
+    Supports single faces, and in multi-face reference photos, extracts embedding
+    specifically for the user-selected target_face_index.
     """
+    DeepFace = _get_deepface()
+    cv2 = _get_cv2()
+
+    # If target_face_index was chosen, extract that specific face crop
+    if target_face_index is not None:
+        try:
+            faces = detect_reference_faces(image_path)
+            if faces and 0 <= target_face_index < len(faces):
+                target = faces[target_face_index]
+                box = target["bounding_box"]
+                img = cv2.imread(image_path)
+                if img is not None:
+                    h_img, w_img = img.shape[:2]
+                    pad_x = int(box["w"] * 0.25)
+                    pad_y = int(box["h"] * 0.25)
+                    x1 = max(0, box["x"] - pad_x)
+                    y1 = max(0, box["y"] - pad_y)
+                    x2 = min(w_img, box["x"] + box["w"] + pad_x)
+                    y2 = min(h_img, box["y"] + box["h"] + pad_y)
+                    face_crop = img[y1:y2, x1:x2]
+                    if face_crop.size > 0:
+                        reps = DeepFace.represent(
+                            img_path=face_crop,
+                            model_name=model_name,
+                            enforce_detection=False,
+                        )
+                        if reps:
+                            logger.info(
+                                "Extracted embedding for targeted face %d (%s-D)",
+                                target_face_index,
+                                len(reps[0]["embedding"]),
+                            )
+                            return np.array(reps[0]["embedding"], dtype=np.float32)
+        except Exception as exc:
+            logger.warning("Targeted face extraction failed: %s. Falling back to dominant face.", exc)
+
     variants = _generate_detection_variants(image_path)
     if not variants:
         return None
@@ -189,7 +296,7 @@ def extract_embedding(image_path: str, model_name: str = "ArcFace") -> Optional[
                         reverse=True,
                     )
                     logger.info(
-                        "Multiple faces detected in reference (%d). Auto-selecting the primary largest face.",
+                        "Multiple faces detected in reference (%d). Auto-selecting primary face.",
                         len(embedding_objs),
                     )
                     embedding = np.array(embedding_objs[0]["embedding"], dtype=np.float32)
@@ -258,13 +365,15 @@ def match_face_in_image(
     dataset_image_path: str,
     reference_embedding: np.ndarray,
     model_name: str = "ArcFace",
-    distance_threshold: float = 0.4,
-) -> Tuple[bool, float, float, int, dict]:
+    distance_threshold: float = 0.45,
+    candidate_threshold: float = 0.65,
+) -> Tuple[bool, bool, float, float, int, dict]:
     """
     Try to match the reference face in a dataset image.
-    Evaluates the original orientation first for 5x faster throughput.
+    Evaluates original orientation first for 5x faster throughput with OpenCV/SSD,
+    falling back to MTCNN on occlusions or challenging angles.
     Returns:
-        (is_match: bool, similarity_score: float, distance: float, face_count: int, blur_info: dict)
+        (is_match: bool, is_candidate: bool, similarity_score: float, distance: float, face_count: int, blur_info: dict)
     """
     best_similarity = 0.0
     best_distance = float("inf")
@@ -273,9 +382,9 @@ def match_face_in_image(
     image = preprocess_image(dataset_image_path)
     if image is None:
         blur_info = detect_blur(dataset_image_path)
-        return False, 0.0, float("inf"), 0, blur_info
+        return False, False, 0.0, float("inf"), 0, blur_info
 
-    # Fast evaluation on natural orientation with OpenCV/SSD detectors
+    # Fast evaluation on natural orientation with OpenCV/SSD + MTCNN fallback
     try:
         embedding_objs = _represent_variant(image, model_name, fast_mode=True)
         if embedding_objs:
@@ -292,34 +401,46 @@ def match_face_in_image(
 
     blur_info = detect_blur(dataset_image_path)
     is_match = best_distance <= distance_threshold
-    return is_match, round(best_similarity, 4), round(best_distance, 4), face_count, blur_info
+    is_candidate = (not is_match) and (best_distance <= candidate_threshold)
+    return (
+        is_match,
+        is_candidate,
+        round(best_similarity, 4),
+        round(best_distance, 4),
+        face_count,
+        blur_info,
+    )
 
 
 def scan_dataset(
     reference_image_path: str,
     dataset_folder: str,
     model_name: str = "ArcFace",
-    distance_threshold: float = 0.4,
+    distance_threshold: float = 0.45,
+    selected_face_index: Optional[int] = None,
     progress_callback: Optional[Callable[[dict], None]] = None,
 ) -> dict:
     """
-    Scan all images in dataset_folder and return matches.
-
-    Returns a dict with matched images, blur info, and scan statistics.
+    Scan all images in dataset_folder and return confirmed matches and review candidates.
+    Supports selected_face_index for multi-face disambiguation.
     """
     start_time = time.time()
 
-    # Step 1: Extract reference embedding
+    # Step 1: Extract reference embedding (using selected face if specified)
     if progress_callback:
         progress_callback(
             {
                 "stage": "reference_analysis",
                 "progress_percent": 30,
-                "stage_message": "Loading Neural Engine & extracting 512-D face biometric vector...",
+                "stage_message": "Extracting 512-D cranial and facial biometric landmarks...",
             }
         )
 
-    reference_embedding = extract_embedding(reference_image_path, model_name)
+    reference_embedding = extract_embedding(
+        reference_image_path,
+        model_name,
+        target_face_index=selected_face_index,
+    )
     if reference_embedding is None:
         raise FaceRecognitionError(
             ErrorCode.NO_FACE_IN_REFERENCE,
@@ -359,17 +480,30 @@ def scan_dataset(
             }
         )
 
-    logger.info(f"Scanning {len(dataset_paths)} images with model={model_name}, threshold={distance_threshold}")
+    logger.info(
+        "Scanning %d images with model=%s, threshold=%.2f, selected_face=%s",
+        len(dataset_paths),
+        model_name,
+        distance_threshold,
+        selected_face_index,
+    )
 
     matched = []
+    candidates = []
     images_with_detected_faces = 0
     images_without_detected_faces = 0
     images_with_multiple_faces = 0
     blurry_matches = 0
     total_paths = len(dataset_paths)
+    candidate_threshold = max(distance_threshold + 0.20, 0.65)
+
     for index, img_path in enumerate(dataset_paths, start=1):
-        is_match, similarity, distance, face_count, blur_info = match_face_in_image(
-            img_path, reference_embedding, model_name, distance_threshold
+        is_match, is_candidate, similarity, distance, face_count, blur_info = match_face_in_image(
+            img_path,
+            reference_embedding,
+            model_name,
+            distance_threshold=distance_threshold,
+            candidate_threshold=candidate_threshold,
         )
         if face_count > 0:
             images_with_detected_faces += 1
@@ -378,12 +512,18 @@ def scan_dataset(
         if face_count > 1:
             images_with_multiple_faces += 1
 
-        if is_match:
+        if is_match or is_candidate:
             confidence_percent, confidence_label, match_reason = classify_confidence(similarity)
+            tier = "confirmed" if is_match else "candidate"
+            if is_candidate:
+                confidence_label = "potential_match"
+                match_reason = "Potential facial match with moderate similarity. Review visually to confirm."
+
             if blur_info["is_blurry"]:
                 blurry_matches += 1
                 match_reason += f" Note: this image appears blurry ({blur_info['description']})."
-            matched.append({
+
+            item_dict = {
                 "filename": Path(img_path).name,
                 "path": img_path,
                 "similarity_score": similarity,
@@ -396,8 +536,15 @@ def scan_dataset(
                 "blur_score": blur_info["blur_score"],
                 "is_blurry": blur_info["is_blurry"],
                 "blur_description": blur_info["description"],
-            })
-            logger.info(f"MATCH: {Path(img_path).name} (sim={similarity}, dist={distance}, blur={blur_info['blur_score']})")
+                "match_tier": tier,
+            }
+
+            if is_match:
+                matched.append(item_dict)
+                logger.info(f"MATCH: {Path(img_path).name} (sim={similarity}, dist={distance})")
+            else:
+                candidates.append(item_dict)
+                logger.info(f"CANDIDATE: {Path(img_path).name} (sim={similarity}, dist={distance})")
 
         if progress_callback:
             progress_callback(
@@ -407,22 +554,27 @@ def scan_dataset(
                     "total_images_scanned": index,
                     "current_image": Path(img_path).name,
                     "matched_count": len(matched),
+                    "candidate_count": len(candidates),
                     "matched_items": list(matched),
-                    "stage_message": f"Scanning image {index} of {total_paths}. (Found {len(matched)} matches so far)",
+                    "candidate_items": list(candidates),
+                    "stage_message": f"Scanning image {index} of {total_paths}. (Found {len(matched)} verified, {len(candidates)} candidates)",
                     "progress_percent": min(95, 40 + int((index / total_paths) * 55)),
                 }
             )
 
     # Sort by similarity score descending
     matched.sort(key=lambda x: x["similarity_score"], reverse=True)
+    candidates.sort(key=lambda x: x["similarity_score"], reverse=True)
 
     elapsed = round(time.time() - start_time, 2)
+    all_found = matched + candidates
     logger.info(
-        f"Scan complete: {len(matched)}/{len(dataset_paths)} matches in {elapsed}s"
+        f"Scan complete: {len(matched)} verified, {len(candidates)} candidates out of {len(dataset_paths)} images in {elapsed}s"
     )
 
     return {
         "matched": matched,
+        "candidates": candidates,
         "total_scanned": len(dataset_paths),
         "total_discovered": len(dataset_paths),
         "images_with_detected_faces": images_with_detected_faces,
@@ -431,9 +583,9 @@ def scan_dataset(
         "blurry_matches": blurry_matches,
         "reference_blur": ref_blur,
         "average_match_confidence": round(
-            sum(item["similarity_score"] for item in matched) / len(matched),
+            sum(item["similarity_score"] for item in all_found) / len(all_found),
             4,
-        ) if matched else None,
-        "top_match_confidence": matched[0]["similarity_score"] if matched else None,
+        ) if all_found else None,
+        "top_match_confidence": all_found[0]["similarity_score"] if all_found else None,
         "processing_time": elapsed,
     }

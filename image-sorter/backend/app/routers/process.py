@@ -83,6 +83,7 @@ async def start_processing(request: ProcessRequest, http_request: Request):
     session.dataset_source_kind = dataset_source_kind
     session.requested_model_name = request.model_name
     session.requested_similarity_threshold = request.similarity_threshold
+    session.selected_face_index = request.selected_face_index
     update_session(session)
 
     queue_position = enqueue_processing_job(request.session_id)

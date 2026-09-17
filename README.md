@@ -50,15 +50,18 @@ Backend test suite:
 
 Completed in this workspace:
 
-- legacy Facefinder code removed
-- live processing progress/status contract improved
-- persistent session storage kept as backend truth
-- dataset download and archive handling hardened
-- Google Photos, Pixieset, and Pixabay gallery-provider support added
-- orientation and low-quality image fallback handling improved
-- frontend product name updated to `FaceFinder AI`
+- **Multi-Face Reference Disambiguation**: When an uploaded reference image contains multiple people, interactive face crop selection allows targeting the exact person before initiating dataset scanning.
+- **Occlusion & Sunglasses Handling**: Multi-stage detection pipeline (OpenCV / SSD with MTCNN fallback) reliably detects and extracts ArcFace embeddings even under harsh lighting, hats, and sunglasses.
+- **Candidate Verification Tier ("Is this you?")**: Tiered matching separates high-confidence matches ($d \le 0.45$) from borderline candidates ($0.45 < d \le 0.65$), presenting side-by-side comparison cards with one-click "Confirm" or "Dismiss" actions.
+- **Dynamic Match Promotion**: Confirmed candidates dynamically update the matched count and are immediately included in the downloadable ZIP archive.
+- **Dataset Retrieval Support**: Google Photos public shared albums, Pixieset, Pixabay, Google Drive, Dropbox direct links, and public ZIP uploads supported with automatic extraction and sanitization.
+- **Live Progress Cockpit**: Real-time percentage tracking, scan stages, and live match counters streamed via status polling.
 
-Remaining external requirement before public deployment:
+---
 
-- valid Vercel authentication on this machine
-- valid Google Cloud authentication on this machine
+## What is Still Remaining (Next Steps / Roadmap)
+
+- **Live Production Deployment Credentials**: The Docker container and Vercel configurations are ready; the only remaining deployment step is connecting the active cloud deployment tokens (Vercel and Google Cloud / Cloud Run).
+- **GPU Acceleration & Vector Database Scaling**: Transitioning the vector search from in-memory CPU NumPy arrays to a GPU-accelerated vector index (such as FAISS or Qdrant/Milvus) to search galleries of 50,000+ photos in sub-second time.
+- **Permanent Multi-Tenant User Accounts**: Adding database-backed user authentication (PostgreSQL/Supabase) to persist albums and search history permanently across sessions.
+

@@ -90,6 +90,10 @@ async def get_status(session_id: str):
         estimated_remaining_seconds=_get_estimated_remaining_seconds(session, stage_elapsed_seconds),
         processing_time_seconds=session.processing_time_seconds,
         matched_images=session.matched_images or [],
+        candidate_images=session.candidate_images or [],
+        candidate_count=session.candidate_count or len(session.candidate_images or []),
+        selected_face_index=session.selected_face_index,
+        detected_reference_faces=session.detected_reference_faces,
         manual_search_estimated_seconds=(
             round(session.total_images_discovered * 1.8, 1) if session.total_images_discovered > 0 else None
         ),
@@ -135,12 +139,16 @@ async def get_results(session_id: str):
         total_images_scanned=session.total_images_scanned,
         total_images_discovered=session.total_images_discovered,
         matched_count=session.matched_count,
+        candidate_count=session.candidate_count or len(session.candidate_images or []),
         images_with_detected_faces=session.images_with_detected_faces,
         images_without_detected_faces=session.images_without_detected_faces,
         images_with_multiple_faces=session.images_with_multiple_faces,
         average_match_confidence=session.average_match_confidence,
         top_match_confidence=session.top_match_confidence,
-        matched_images=session.matched_images,
+        matched_images=session.matched_images or [],
+        candidate_images=session.candidate_images or [],
+        selected_face_index=session.selected_face_index,
+        detected_reference_faces=session.detected_reference_faces,
         queue_position=session.queue_position,
         dataset_downloaded_bytes=session.dataset_downloaded_bytes,
         dataset_total_bytes=session.dataset_total_bytes,
@@ -163,6 +171,47 @@ async def get_results(session_id: str):
         color_space_normalized=True,
         error=session.error,
     )
+
+
+from pydantic import BaseModel
+
+
+class ConfirmMatchesRequest(BaseModel):
+    confirmed_filenames: list[str]
+
+
+@router.post("/{session_id}/confirm-matches", summary="Confirm candidate matches")
+async def confirm_candidate_matches(session_id: str, request: ConfirmMatchesRequest):
+    session = get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found.")
+
+    confirmed_set = set(request.confirmed_filenames)
+    new_matched = list(session.matched_images or [])
+    remaining_candidates = []
+
+    for cand in (session.candidate_images or []):
+        if cand.filename in confirmed_set or cand.relative_path in confirmed_set:
+            cand.match_tier = "confirmed"
+            cand.confidence_label = "confirmed_by_user"
+            cand.match_reason = "Confirmed by user inspection."
+            new_matched.append(cand)
+        else:
+            remaining_candidates.append(cand)
+
+    session.matched_images = new_matched
+    session.candidate_images = remaining_candidates
+    session.matched_count = len(new_matched)
+    session.candidate_count = len(remaining_candidates)
+    from app.services.session_store import update_session
+    update_session(session)
+
+    return {
+        "session_id": session_id,
+        "matched_count": session.matched_count,
+        "candidate_count": session.candidate_count,
+        "message": f"Successfully confirmed {len(request.confirmed_filenames)} matches.",
+    }
 
 
 @router.get("/worker/snapshot", response_model=WorkerSnapshotResponse, summary="Get worker snapshot")

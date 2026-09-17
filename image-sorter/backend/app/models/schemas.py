@@ -57,6 +57,13 @@ class SessionError(BaseModel):
     retryable: bool = False
 
 
+class FaceDetectionItem(BaseModel):
+    face_index: int
+    confidence: float
+    bounding_box: dict
+    thumbnail_base64: str
+
+
 class MatchedImage(BaseModel):
     filename: str
     relative_path: str
@@ -73,18 +80,7 @@ class MatchedImage(BaseModel):
     blur_score: Optional[float] = Field(default=None, description="Laplacian variance blur score")
     is_blurry: Optional[bool] = Field(default=None, description="Whether the image is flagged as blurry")
     blur_description: Optional[str] = Field(default=None, description="Human-readable blur assessment")
-    filename: str
-    relative_path: str
-    similarity_score: float = Field(..., ge=0.0, le=1.0, description="Confidence score 0-1")
-    distance: float = Field(..., description="Embedding distance (lower = more similar)")
-    download_url: str
-    preview_url: str
-    rank: int
-    face_count: Optional[int] = Field(default=None, ge=0)
-    confidence_percent: int = Field(..., ge=0, le=100)
-    confidence_label: str
-    match_reason: str
-    source_group: str
+    match_tier: str = Field(default="confirmed", description="'confirmed' (high similarity) or 'candidate' (needs confirmation)")
 
 
 class ProcessingSession(BaseModel):
@@ -93,6 +89,8 @@ class ProcessingSession(BaseModel):
     stage: ProcessingStage = ProcessingStage.UPLOAD_RECEIVED
     created_at: datetime = Field(default_factory=utc_now)
     reference_image_path: Optional[str] = None
+    selected_face_index: Optional[int] = None
+    detected_reference_faces: Optional[List[FaceDetectionItem]] = None
     dataset_source: Optional[str] = None  # URL or folder path
     dataset_download_url: Optional[str] = None
     dataset_provider: Optional[str] = None
@@ -103,6 +101,8 @@ class ProcessingSession(BaseModel):
     total_images_discovered: int = 0
     matched_images: List[MatchedImage] = Field(default_factory=list)
     matched_count: int = 0
+    candidate_images: List[MatchedImage] = Field(default_factory=list)
+    candidate_count: int = 0
     images_with_detected_faces: int = 0
     images_without_detected_faces: int = 0
     images_with_multiple_faces: int = 0
@@ -127,6 +127,10 @@ class ProcessingSession(BaseModel):
 class ProcessRequest(BaseModel):
     session_id: str
     dataset_url: Optional[str] = None
+    selected_face_index: Optional[int] = Field(
+        default=None,
+        description="Index of selected face if reference image has multiple people",
+    )
     similarity_threshold: float = Field(
         default=0.4,
         ge=0.1,
@@ -162,6 +166,7 @@ class StatusResponse(BaseModel):
     total_images_scanned: int
     total_images_discovered: int
     matched_count: int
+    candidate_count: int = 0
     images_with_detected_faces: int
     images_without_detected_faces: int
     images_with_multiple_faces: int
@@ -180,6 +185,9 @@ class StatusResponse(BaseModel):
     estimated_remaining_seconds: Optional[float]
     processing_time_seconds: Optional[float]
     matched_images: List[MatchedImage] = []
+    candidate_images: List[MatchedImage] = []
+    selected_face_index: Optional[int] = None
+    detected_reference_faces: Optional[List[FaceDetectionItem]] = None
     manual_search_estimated_seconds: Optional[float] = None
     time_saved_percent: Optional[float] = None
     color_space_normalized: bool = True
@@ -200,12 +208,16 @@ class ResultsResponse(BaseModel):
     total_images_scanned: int
     total_images_discovered: int
     matched_count: int
+    candidate_count: int = 0
     images_with_detected_faces: int
     images_without_detected_faces: int
     images_with_multiple_faces: int
     average_match_confidence: Optional[float]
     top_match_confidence: Optional[float]
     matched_images: List[MatchedImage]
+    candidate_images: List[MatchedImage] = []
+    selected_face_index: Optional[int] = None
+    detected_reference_faces: Optional[List[FaceDetectionItem]] = None
     queue_position: Optional[int]
     dataset_downloaded_bytes: int
     dataset_total_bytes: Optional[int]

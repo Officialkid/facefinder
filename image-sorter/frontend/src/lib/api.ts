@@ -38,11 +38,19 @@ export const SESSION_ERROR_CODES = [
 ] as const;
 export type SessionErrorCode = (typeof SESSION_ERROR_CODES)[number];
 
+export interface DetectedReferenceFace {
+  face_index: number;
+  confidence: number;
+  bounding_box: { x: number; y: number; w: number; h: number };
+  thumbnail_base64: string;
+}
+
 export interface UploadResponse {
   session_id: string;
   status: string;
   message: string;
   reference_image: string;
+  detected_faces?: DetectedReferenceFace[];
 }
 
 export interface SessionError {
@@ -82,6 +90,7 @@ export interface StatusResponse {
   total_images_scanned: number;
   total_images_discovered: number;
   matched_count: number;
+  candidate_count?: number;
   images_with_detected_faces: number;
   images_without_detected_faces: number;
   images_with_multiple_faces: number;
@@ -100,6 +109,9 @@ export interface StatusResponse {
   estimated_remaining_seconds: number | null;
   processing_time_seconds: number | null;
   matched_images?: MatchedImage[];
+  candidate_images?: MatchedImage[];
+  selected_face_index?: number | null;
+  detected_reference_faces?: DetectedReferenceFace[] | null;
   manual_search_estimated_seconds?: number | null;
   time_saved_percent?: number | null;
   color_space_normalized?: boolean;
@@ -120,6 +132,10 @@ export interface MatchedImage {
   confidence_label: string;
   match_reason: string;
   source_group: string;
+  match_tier?: "confirmed" | "candidate";
+  blur_score?: number | null;
+  is_blurry?: boolean | null;
+  blur_description?: string | null;
 }
 
 export interface ResultsResponse {
@@ -135,12 +151,16 @@ export interface ResultsResponse {
   total_images_scanned: number;
   total_images_discovered: number;
   matched_count: number;
+  candidate_count?: number;
   images_with_detected_faces: number;
   images_without_detected_faces: number;
   images_with_multiple_faces: number;
   average_match_confidence: number | null;
   top_match_confidence: number | null;
   matched_images: MatchedImage[];
+  candidate_images?: MatchedImage[];
+  selected_face_index?: number | null;
+  detected_reference_faces?: DetectedReferenceFace[] | null;
   queue_position: number | null;
   dataset_downloaded_bytes: number;
   dataset_total_bytes: number | null;
@@ -288,15 +308,28 @@ export const ImageSorterAPI = {
   startProcessing: async (
     session_id: string,
     dataset_url: string,
-    similarity_threshold: number = 0.4,
-    model_name: RecognitionModel = "ArcFace"
+    similarity_threshold: number = 0.45,
+    model_name: RecognitionModel = "ArcFace",
+    selected_face_index: number | null = null,
   ): Promise<ProcessStartResponse> => {
     const { data } = await api.post<ProcessStartResponse>("/process/start", {
       session_id,
       dataset_url,
       similarity_threshold,
       model_name,
+      selected_face_index,
     });
+    return data;
+  },
+
+  confirmCandidateMatches: async (
+    session_id: string,
+    confirmed_filenames: string[]
+  ): Promise<{ session_id: string; matched_count: number; candidate_count: number; message: string }> => {
+    const { data } = await api.post<{ session_id: string; matched_count: number; candidate_count: number; message: string }>(
+      `/results/${session_id}/confirm-matches`,
+      { confirmed_filenames }
+    );
     return data;
   },
 
