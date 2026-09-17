@@ -111,8 +111,8 @@ def _generate_detection_variants(image_path: str) -> list[tuple[str, np.ndarray]
 
 def _represent_variant(image: np.ndarray, model_name: str, fast_mode: bool = False):
     DeepFace = _get_deepface()
-    # In fast mode (dataset photos), use high-throughput OpenCV/SSD detectors
-    detectors = ["opencv", "ssd"] if fast_mode else ["ssd", "opencv", "mtcnn"]
+    # High-throughput OpenCV and SSD detectors execute in milliseconds
+    detectors = ["opencv", "ssd"] if fast_mode else ["opencv", "ssd", "mtcnn"]
     last_err = None
     for detector in detectors:
         try:
