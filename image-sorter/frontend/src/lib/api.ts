@@ -268,6 +268,23 @@ export const ImageSorterAPI = {
     return data;
   },
 
+  uploadDatasetZip: async (
+    session_id: string,
+    file: File
+  ): Promise<{ session_id: string; status: string; filename: string; image_count: number; message: string }> => {
+    const formData = new FormData();
+    formData.append("file", file);
+    const { data } = await api.post<{ session_id: string; status: string; filename: string; image_count: number; message: string }>(
+      `/upload/dataset-zip?session_id=${encodeURIComponent(session_id)}`,
+      formData,
+      {
+        headers: { "Content-Type": "multipart/form-data" },
+        timeout: 120000,
+      }
+    );
+    return data;
+  },
+
   startProcessing: async (
     session_id: string,
     dataset_url: string,

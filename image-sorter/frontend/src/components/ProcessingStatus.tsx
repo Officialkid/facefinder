@@ -229,19 +229,19 @@ export default function ProcessingStatus({ sessionId, onComplete, onFailed }: Pr
           {/* Central Animated HUD Biometric Radar Reticle */}
           <div className="relative w-44 h-44 sm:w-52 sm:h-52 flex items-center justify-center my-4">
             {/* Outer radar circle */}
-            <div className="absolute inset-0 rounded-full border border-secondary/30" />
-            <div className="absolute inset-4 rounded-full border border-dashed border-primary/40 animate-spin" style={{ animationDuration: "16s" }} />
-            <div className="absolute inset-8 rounded-full border border-white/10" />
+            <div className="absolute inset-0 rounded-full border border-secondary/30 hud-radar-circle" />
+            <div className="absolute inset-4 rounded-full border border-dashed border-primary/40 animate-spin hud-radar-dashed" style={{ animationDuration: "16s" }} />
+            <div className="absolute inset-8 rounded-full border border-white/10 hud-radar-inner" />
 
             {/* Corner Brackets */}
-            <div className="absolute top-2 left-2 w-4 h-4 border-t-2 border-l-2 border-secondary" />
-            <div className="absolute top-2 right-2 w-4 h-4 border-t-2 border-r-2 border-secondary" />
-            <div className="absolute bottom-2 left-2 w-4 h-4 border-b-2 border-l-2 border-secondary" />
-            <div className="absolute bottom-2 right-2 w-4 h-4 border-b-2 border-r-2 border-secondary" />
+            <div className="absolute top-2 left-2 w-4 h-4 border-t-2 border-l-2 border-secondary hud-radar-reticle" />
+            <div className="absolute top-2 right-2 w-4 h-4 border-t-2 border-r-2 border-secondary hud-radar-reticle" />
+            <div className="absolute bottom-2 left-2 w-4 h-4 border-b-2 border-l-2 border-secondary hud-radar-reticle" />
+            <div className="absolute bottom-2 right-2 w-4 h-4 border-b-2 border-r-2 border-secondary hud-radar-reticle" />
 
             {/* Rotating Radar Sweep Gradient */}
             <div
-              className="absolute inset-0 rounded-full animate-spin pointer-events-none opacity-40"
+              className="absolute inset-0 rounded-full animate-spin pointer-events-none opacity-40 conic-radar"
               style={{
                 background: "conic-gradient(from 0deg, rgba(76, 215, 246, 0.4) 0deg, transparent 90deg)",
                 animationDuration: "3s",
@@ -249,7 +249,7 @@ export default function ProcessingStatus({ sessionId, onComplete, onFailed }: Pr
             />
 
             {/* Center Biometric Face Icon */}
-            <div className="relative z-10 w-16 h-16 rounded-full bg-surface-container flex items-center justify-center border border-secondary text-secondary shadow-[0_0_20px_rgba(76,215,246,0.5)]">
+            <div className="relative z-10 w-16 h-16 rounded-full bg-surface-container flex items-center justify-center border border-secondary text-secondary shadow-[0_0_20px_rgba(76,215,246,0.5)] hud-radar-center">
               <span className="material-symbols-outlined text-[32px] animate-pulse">face</span>
             </div>
           </div>
@@ -274,10 +274,18 @@ export default function ProcessingStatus({ sessionId, onComplete, onFailed }: Pr
         {/* Bottom 4 Metric Cards */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
           <div className="glass-panel rounded-xl p-4">
-            <span className="font-mono text-[10px] uppercase text-on-surface-variant block">Scanned Photos</span>
+            <span className="font-mono text-[10px] uppercase text-on-surface-variant block">
+              {(status?.total_images_scanned ?? 0) > 0 ? "Scanned Photos" : "Prepared Photos"}
+            </span>
             <div className="flex items-baseline gap-1 mt-1">
-              <span className="font-display text-2xl font-bold text-white">{status?.total_images_scanned ?? 0}</span>
-              <span className="text-xs text-outline font-mono">/ {status?.total_images_discovered ?? "--"}</span>
+              <span className="font-display text-2xl font-bold text-white">
+                {(status?.total_images_scanned ?? 0) > 0
+                  ? status?.total_images_scanned
+                  : (status?.dataset_files_extracted ?? 0)}
+              </span>
+              <span className="text-xs text-outline font-mono">
+                / {status?.total_images_discovered || status?.dataset_total_files || "--"}
+              </span>
             </div>
           </div>
 

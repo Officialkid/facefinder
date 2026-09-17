@@ -27,47 +27,122 @@ html.dark .glass-panel {
   border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-/* Light Mode (Lumina Pure) Glass & Surfaces */
+/* ==========================================================================
+   HIGH-CONTRAST LIGHT THEME (Lumina Pro)
+   ========================================================================== */
+html:not(.dark) body {
+  background-color: #f8fafc !important;
+  color: #0f172a !important;
+}
+
+/* Glass Panels: Crisp, modern white cards with soft multi-layer shadows */
 html:not(.dark) .glass-panel {
-  background: rgba(255, 255, 255, 0.85);
+  background: #ffffff !important;
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(15, 23, 42, 0.1);
-  box-shadow: 0 4px 24px -2px rgba(0, 0, 0, 0.06);
+  border: 1px solid #e2e8f0 !important;
+  box-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.05), 0 2px 6px -1px rgba(15, 23, 42, 0.03) !important;
 }
 
 html:not(.dark) .glass-panel-glow {
-  background: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgba(139, 92, 246, 0.4);
-  box-shadow: 0 10px 30px rgba(139, 92, 246, 0.1);
+  background: #ffffff !important;
+  border: 1px solid #c4b5fd !important;
+  box-shadow: 0 10px 30px rgba(109, 40, 217, 0.08) !important;
 }
 
+/* Navigation Bar */
+html:not(.dark) nav {
+  background: rgba(255, 255, 255, 0.92) !important;
+  border-bottom: 1px solid #e2e8f0 !important;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.04) !important;
+}
+
+/* Containers */
 html:not(.dark) .bg-surface-container\/40,
 html:not(.dark) .bg-surface-container\/60,
 html:not(.dark) .bg-surface-container-low\/40,
-html:not(.dark) .bg-surface-container-low\/60 {
-  background-color: rgba(248, 250, 252, 0.85);
+html:not(.dark) .bg-surface-container-low\/60,
+html:not(.dark) .bg-slate-900\/50,
+html:not(.dark) .bg-slate-900\/60 {
+  background-color: #f8fafc !important;
+}
+
+/* Secondary buttons & Provider chips: replace pitch-black bg-surface with crisp light styling */
+html:not(.dark) .bg-surface {
+  background-color: #f1f5f9 !important;
+  border-color: #e2e8f0 !important;
+  color: #334155 !important;
+}
+
+html:not(.dark) button.bg-surface,
+html:not(.dark) .bg-surface.border {
+  background-color: #ffffff !important;
+  border-color: #cbd5e1 !important;
+  color: #334155 !important;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05) !important;
+}
+
+html:not(.dark) button.bg-surface:hover,
+html:not(.dark) .bg-surface:hover {
+  background-color: #f8fafc !important;
+  border-color: #94a3b8 !important;
+  color: #0f172a !important;
+}
+
+/* Stepper: remove awkward rectangular background blocks behind step titles */
+html:not(.dark) .bg-surface-container\/40.px-2,
+html:not(.dark) .bg-surface-container\/60.px-2,
+html:not(.dark) .group\/step {
+  background-color: transparent !important;
 }
 
 html:not(.dark) .bg-surface-container-lowest {
-  background-color: #ffffff;
+  background-color: #ffffff !important;
 }
 
 html:not(.dark) .bg-surface-container {
-  background-color: #f1f5f9;
+  background-color: #f8fafc !important;
 }
 
 html:not(.dark) .bg-surface-container-high {
-  background-color: #e2e8f0;
+  background-color: #e2e8f0 !important;
 }
 
 html:not(.dark) .bg-surface\/80,
 html:not(.dark) .bg-surface\/90 {
-  background-color: rgba(255, 255, 255, 0.9);
+  background-color: rgba(255, 255, 255, 0.95) !important;
 }
 
+html:not(.dark) .bg-surface-variant {
+  background-color: #f1f5f9 !important;
+  color: #475569 !important;
+}
+
+/* Stepper connecting track in light mode */
+html:not(.dark) .h-\[2px\].bg-surface-variant {
+  background-color: #e2e8f0 !important;
+}
+
+/* Error & Alert Banners in Light Mode */
+html:not(.dark) .bg-error-container\/20,
+html:not(.dark) [class*="bg-error-container"],
+html:not(.dark) [class*="bg-error"] {
+  background-color: #fef2f2 !important;
+  border-color: #fecaca !important;
+  color: #991b1b !important;
+}
+
+html:not(.dark) .text-error {
+  color: #dc2626 !important;
+}
+
+html:not(.dark) button[class*="bg-error"],
+html:not(.dark) button.bg-error {
+  background-color: #dc2626 !important;
+  color: #ffffff !important;
+}
+
+/* Form Inputs */
 html:not(.dark) input,
 html:not(.dark) select,
 html:not(.dark) textarea {
@@ -80,21 +155,130 @@ html:not(.dark) input::placeholder {
   color: #94a3b8 !important;
 }
 
+/* Typography & Contrast */
 html:not(.dark) .text-white {
   color: #0f172a !important;
 }
 
+html:not(.dark) .text-on-surface {
+  color: #0f172a !important;
+}
+
 html:not(.dark) .text-on-surface-variant {
-  color: #334155 !important;
+  color: #475569 !important;
 }
 
 html:not(.dark) .text-outline {
   color: #64748b !important;
 }
 
-html:not(.dark) .bg-slate-900\/50,
-html:not(.dark) .bg-slate-900\/60 {
-  background-color: rgba(241, 245, 249, 0.85);
+/* Accessible High-Contrast Accents */
+html:not(.dark) .text-primary {
+  color: #6d28d9 !important; /* Deep royal violet */
+}
+
+html:not(.dark) .text-secondary {
+  color: #0284c7 !important; /* Rich sky blue */
+}
+
+html:not(.dark) .text-tertiary,
+html:not(.dark) .text-tertiary-fixed-dim {
+  color: #047857 !important; /* Forest emerald */
+}
+
+/* Badges, Borders & Highlights */
+html:not(.dark) .bg-primary\/10 {
+  background-color: #f3e8ff !important;
+}
+
+html:not(.dark) .border-primary,
+html:not(.dark) .border-primary\/40,
+html:not(.dark) .border-primary\/30 {
+  border-color: #a855f7 !important;
+}
+
+html:not(.dark) .bg-secondary\/10 {
+  background-color: #e0f2fe !important;
+}
+
+html:not(.dark) .border-secondary,
+html:not(.dark) .border-secondary\/40,
+html:not(.dark) .border-secondary\/30 {
+  border-color: #38bdf8 !important;
+}
+
+html:not(.dark) .bg-tertiary\/10,
+html:not(.dark) .bg-tertiary\/5,
+html:not(.dark) .bg-tertiary-fixed-dim\/10 {
+  background-color: #ecfdf5 !important;
+}
+
+html:not(.dark) .border-tertiary,
+html:not(.dark) .border-tertiary\/40,
+html:not(.dark) .border-tertiary\/20,
+html:not(.dark) .border-tertiary-fixed-dim\/30 {
+  border-color: #34d399 !important;
+}
+
+html:not(.dark) .bg-tertiary-container {
+  background-color: #d1fae5 !important;
+}
+
+html:not(.dark) .text-on-tertiary-container {
+  color: #065f46 !important;
+}
+
+/* De-glow dark mode neon shadows in light mode */
+html:not(.dark) .neon-text-primary,
+html:not(.dark) .neon-text-secondary,
+html:not(.dark) .neon-text-tertiary {
+  text-shadow: none !important;
+}
+
+/* Radar & HUD Reticle in Light Mode */
+html:not(.dark) .conic-radar {
+  background: conic-gradient(from 0deg, rgba(2, 132, 199, 0.22) 0deg, transparent 90deg) !important;
+}
+
+html:not(.dark) .hud-radar-reticle {
+  border-color: #0284c7 !important;
+}
+
+html:not(.dark) .hud-radar-circle {
+  border-color: #bae6fd !important;
+}
+
+html:not(.dark) .hud-radar-dashed {
+  border-color: #c4b5fd !important;
+}
+
+html:not(.dark) .hud-radar-inner {
+  border-color: #e2e8f0 !important;
+}
+
+html:not(.dark) .hud-radar-center {
+  background-color: #ffffff !important;
+  border-color: #0284c7 !important;
+  color: #0284c7 !important;
+  box-shadow: 0 4px 16px rgba(2, 132, 199, 0.2) !important;
+}
+
+/* Left Pipeline Step Fixes for Light Mode */
+html:not(.dark) .opacity-40 {
+  opacity: 0.7 !important;
+}
+
+html:not(.dark) .border-outline-variant {
+  border-color: #cbd5e1 !important;
+}
+
+html:not(.dark) .bg-outline-variant {
+  background-color: #94a3b8 !important;
+}
+
+html:not(.dark) .border-white\/10,
+html:not(.dark) .border-white\/20 {
+  border-color: #e2e8f0 !important;
 }
 
 /* Gradient Buttons always retain crisp white text */

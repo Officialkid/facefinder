@@ -59,6 +59,9 @@ def validate_dataset_url_input(url: str) -> None:
     if len(url) > MAX_DATASET_URL_LENGTH:
         raise HTTPException(status_code=400, detail="dataset_url is too long.")
 
+    if url.startswith("local_zip://"):
+        return
+
     parsed = urlparse(url)
     if parsed.scheme not in {"http", "https"} or not parsed.netloc:
         raise HTTPException(status_code=400, detail="dataset_url must be a valid public http(s) URL.")

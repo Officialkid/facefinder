@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
+import { useDropzone } from "react-dropzone";
 import { ImageSorterAPI, RecognitionModel } from "@/lib/api";
 
 interface Props {
@@ -11,6 +12,7 @@ interface Props {
 }
 
 export default function DatasetForm({ sessionId, referencePreview, onStarted, onBack }: Props) {
+  const [sourceMode, setSourceMode] = useState<"url" | "zip">("url");
   const [datasetUrl, setDatasetUrl] = useState("");
   const [threshold, setThreshold] = useState(0.4);
   const [modelName, setModelName] = useState<RecognitionModel>("ArcFace");
@@ -18,11 +20,60 @@ export default function DatasetForm({ sessionId, referencePreview, onStarted, on
   const [error, setError] = useState<string | null>(null);
   const [imgSrc, setImgSrc] = useState(referencePreview || ImageSorterAPI.getReferenceImageUrl(sessionId));
 
+  // ZIP upload state
+  const [zipFile, setZipFile] = useState<File | null>(null);
+  const [zipUploading, setZipUploading] = useState(false);
+  const [zipReadyCount, setZipReadyCount] = useState<number | null>(null);
+
+  const handleZipDrop = useCallback(async (acceptedFiles: File[]) => {
+    const file = acceptedFiles[0];
+    if (!file) return;
+
+    if (!file.name.toLowerCase().endsWith(".zip")) {
+      setError("Please select a valid .zip file.");
+      return;
+    }
+
+    setZipFile(file);
+    setError(null);
+    setZipUploading(true);
+
+    try {
+      const res = await ImageSorterAPI.uploadDatasetZip(sessionId, file);
+      setZipReadyCount(res.image_count);
+      setDatasetUrl(`local_zip://${file.name}`);
+    } catch (err: any) {
+      const msg = err?.response?.data?.detail ?? "Failed to upload and extract ZIP file. Please try again.";
+      setError(msg);
+      setZipFile(null);
+      setZipReadyCount(null);
+    } finally {
+      setZipUploading(false);
+    }
+  }, [sessionId]);
+
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    onDrop: handleZipDrop,
+    accept: { "application/zip": [".zip"], "application/x-zip-compressed": [".zip"] },
+    maxFiles: 1,
+    maxSize: 300 * 1024 * 1024,
+    noClick: false,
+    onDropRejected: (rejections) => {
+      const msg = rejections[0]?.errors[0]?.message ?? "File rejected. Please upload a ZIP under 300MB.";
+      setError(msg);
+    },
+  });
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!datasetUrl.trim()) {
+    if (sourceMode === "url" && !datasetUrl.trim()) {
       setError("Please enter a valid dataset or album URL.");
+      return;
+    }
+
+    if (sourceMode === "zip" && !datasetUrl.startsWith("local_zip://")) {
+      setError("Please upload a .zip file first.");
       return;
     }
 
@@ -38,7 +89,7 @@ export default function DatasetForm({ sessionId, referencePreview, onStarted, on
       );
       onStarted();
     } catch (err: any) {
-      const msg = err?.response?.data?.detail ?? "Failed to initiate scan. Please verify your album URL.";
+      const msg = err?.response?.data?.detail ?? "Failed to initiate scan. Please verify your album source.";
       setError(msg);
     } finally {
       setLoading(false);
@@ -153,48 +204,133 @@ export default function DatasetForm({ sessionId, referencePreview, onStarted, on
 
             {/* Target Dataset Source Input */}
             <div className="md:col-span-8 glass-panel rounded-xl p-4 flex flex-col justify-between space-y-3 bg-surface-container-low/60">
+              {/* Mode Toggle Header */}
               <div className="flex items-center justify-between">
-                <label htmlFor="dataset-url" className="font-mono text-[11px] uppercase tracking-wider text-on-surface-variant font-medium">
-                  Target Dataset / Album Source URL
-                </label>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSourceMode("url");
+                      if (datasetUrl.startsWith("local_zip://")) {
+                        setDatasetUrl("");
+                      }
+                    }}
+                    className={`px-3 py-1 rounded-md text-xs font-mono font-bold transition-all flex items-center gap-1.5 ${
+                      sourceMode === "url"
+                        ? "bg-secondary text-slate-950 shadow-sm"
+                        : "text-on-surface-variant hover:text-white bg-surface-container"
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-[14px]">link</span>
+                    <span>Album / Gallery URL</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSourceMode("zip");
+                      if (!datasetUrl.startsWith("local_zip://")) {
+                        setDatasetUrl(zipFile ? `local_zip://${zipFile.name}` : "");
+                      }
+                    }}
+                    className={`px-3 py-1 rounded-md text-xs font-mono font-bold transition-all flex items-center gap-1.5 ${
+                      sourceMode === "zip"
+                        ? "bg-tertiary text-slate-950 shadow-sm"
+                        : "text-on-surface-variant hover:text-white bg-surface-container"
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-[14px]">folder_zip</span>
+                    <span>Upload Local ZIP</span>
+                  </button>
+                </div>
                 <span className="material-symbols-outlined text-outline text-[16px]">info</span>
               </div>
 
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-secondary">
-                  <span className="material-symbols-outlined text-[18px]">link</span>
-                </div>
-                <input
-                  id="dataset-url"
-                  type="url"
-                  value={datasetUrl}
-                  onChange={(e) => setDatasetUrl(e.target.value)}
-                  placeholder="https://photos.app.goo.gl/... or https://client.pixieset.com/... or ZIP Link"
-                  className="w-full pl-10 pr-4 py-2.5 bg-surface-container-lowest border border-white/10 rounded-lg text-xs text-white placeholder:text-outline focus:outline-none focus:border-secondary focus:ring-1 focus:ring-secondary font-mono"
-                  required
-                />
-              </div>
+              {/* URL Input Mode */}
+              {sourceMode === "url" ? (
+                <>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-secondary">
+                      <span className="material-symbols-outlined text-[18px]">link</span>
+                    </div>
+                    <input
+                      id="dataset-url"
+                      type="url"
+                      value={datasetUrl.startsWith("local_zip://") ? "" : datasetUrl}
+                      onChange={(e) => setDatasetUrl(e.target.value)}
+                      placeholder="https://photos.app.goo.gl/... or https://client.pixieset.com/... or Google Drive Link"
+                      className="w-full pl-10 pr-4 py-2.5 bg-surface-container-lowest border border-white/10 rounded-lg text-xs text-white placeholder:text-outline focus:outline-none focus:border-secondary focus:ring-1 focus:ring-secondary font-mono"
+                    />
+                  </div>
 
-              {/* Supported Provider Chips */}
-              <div className="flex flex-wrap items-center gap-2 pt-1">
-                <span className="font-mono text-[10px] text-outline">Supported:</span>
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-surface border border-white/5 font-mono text-[10px] text-on-surface-variant">
-                  <span className="material-symbols-outlined text-[12px] text-secondary">photo_library</span>
-                  Google Photos
-                </span>
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-surface border border-white/5 font-mono text-[10px] text-on-surface-variant">
-                  <span className="material-symbols-outlined text-[12px] text-secondary">collections</span>
-                  Pixieset
-                </span>
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-surface border border-white/5 font-mono text-[10px] text-on-surface-variant">
-                  <span className="material-symbols-outlined text-[12px] text-primary">cloud</span>
-                  Google Drive
-                </span>
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-surface border border-white/5 font-mono text-[10px] text-on-surface-variant">
-                  <span className="material-symbols-outlined text-[12px] text-tertiary">folder_zip</span>
-                  Direct ZIP
-                </span>
-              </div>
+                  {/* Supported Provider Chips */}
+                  <div className="flex flex-wrap items-center gap-2 pt-1">
+                    <span className="font-mono text-[10px] text-outline">Supported:</span>
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-surface border border-white/5 font-mono text-[10px] text-on-surface-variant">
+                      <span className="material-symbols-outlined text-[12px] text-secondary">photo_library</span>
+                      Google Photos
+                    </span>
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-surface border border-white/5 font-mono text-[10px] text-on-surface-variant">
+                      <span className="material-symbols-outlined text-[12px] text-secondary">collections</span>
+                      Pixieset
+                    </span>
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-surface border border-white/5 font-mono text-[10px] text-primary">cloud</span>
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-surface border border-white/5 font-mono text-[10px] text-on-surface-variant">
+                      Google Drive
+                    </span>
+                  </div>
+                </>
+              ) : (
+                /* ZIP File Drag-and-Drop Mode */
+                <div className="space-y-2">
+                  <div
+                    {...getRootProps()}
+                    className={`w-full border-2 border-dashed rounded-xl p-4 sm:p-5 flex flex-col items-center justify-center transition-all cursor-pointer relative overflow-hidden ${
+                      isDragActive
+                        ? "border-tertiary bg-tertiary/10 shadow-[0_0_20px_rgba(45,212,191,0.2)]"
+                        : zipFile
+                        ? "border-tertiary/60 bg-surface-container-lowest"
+                        : "border-white/20 hover:border-tertiary/60 bg-surface-container-lowest hover:bg-surface-container/50"
+                    }`}
+                  >
+                    <input {...getInputProps()} />
+
+                    {zipUploading ? (
+                      <div className="flex flex-col items-center gap-2 py-2">
+                        <div className="w-6 h-6 rounded-full border-2 border-tertiary border-t-transparent animate-spin" />
+                        <span className="font-mono text-xs text-tertiary font-medium">Extracting ZIP archive photos...</span>
+                      </div>
+                    ) : zipFile && zipReadyCount !== null ? (
+                      <div className="flex items-center justify-between w-full px-2">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-lg bg-tertiary/20 border border-tertiary/40 flex items-center justify-center text-tertiary">
+                            <span className="material-symbols-outlined text-[22px]">folder_zip</span>
+                          </div>
+                          <div>
+                            <p className="font-mono text-xs font-bold text-white truncate max-w-[220px] sm:max-w-xs">{zipFile.name}</p>
+                            <p className="font-mono text-[11px] text-tertiary flex items-center gap-1">
+                              <span className="material-symbols-outlined text-[13px]">check_circle</span>
+                              <span>{zipReadyCount} event photos ready for scanning</span>
+                            </p>
+                          </div>
+                        </div>
+                        <span className="px-2.5 py-1 rounded bg-surface border border-white/10 text-[10px] font-mono text-on-surface-variant">
+                          Click to Change
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center text-center gap-1.5 py-2">
+                        <div className="w-9 h-9 rounded-full bg-tertiary/15 border border-tertiary/30 flex items-center justify-center text-tertiary">
+                          <span className="material-symbols-outlined text-[20px]">upload_file</span>
+                        </div>
+                        <div>
+                          <span className="font-mono text-xs font-bold text-white">Click or drag &amp; drop your .ZIP file here</span>
+                          <p className="font-mono text-[10px] text-outline mt-0.5">Supports ZIP archives containing 1 to 1,000+ event photos (JPG, PNG, WEBP)</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 

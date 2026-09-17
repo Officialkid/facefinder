@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useDropzone } from "react-dropzone";
 import { ImageSorterAPI, UploadResponse } from "@/lib/api";
 
@@ -13,11 +13,9 @@ export default function ReferenceUpload({ onSuccess }: Props) {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const onDrop = useCallback((acceptedFiles: File[]) => {
-    const file = acceptedFiles[0];
-    if (!file) return;
-
+  const handleSelectedFile = useCallback((file: File) => {
     setError(null);
     setSelectedFile(file);
 
@@ -30,11 +28,18 @@ export default function ReferenceUpload({ onSuccess }: Props) {
     reader.readAsDataURL(file);
   }, []);
 
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+  const onDrop = useCallback((acceptedFiles: File[]) => {
+    const file = acceptedFiles[0];
+    if (!file) return;
+    handleSelectedFile(file);
+  }, [handleSelectedFile]);
+
+  const { getRootProps, getInputProps, isDragActive, open } = useDropzone({
     onDrop,
     accept: { "image/jpeg": [], "image/png": [], "image/webp": [], "image/bmp": [] },
     maxFiles: 1,
     maxSize: 10 * 1024 * 1024,
+    noClick: false,
     onDropRejected: (rejections) => {
       const msg = rejections[0]?.errors[0]?.message ?? "File not accepted. Please use JPG, PNG, WEBP, or BMP.";
       setError(msg);
@@ -184,8 +189,34 @@ export default function ReferenceUpload({ onSuccess }: Props) {
                 </svg>
               </div>
 
+              {/* Direct file input fallback for maximum browser reliability */}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp,image/bmp"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) handleSelectedFile(file);
+                }}
+              />
+
               <h3 className="text-lg font-bold text-white mb-2 text-center">
-                Drag and drop your reference portrait here or <span className="text-secondary underline">browse files</span>
+                Drag and drop your reference portrait here or{" "}
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (fileInputRef.current) {
+                      fileInputRef.current.click();
+                    } else {
+                      open();
+                    }
+                  }}
+                  className="text-secondary underline hover:text-secondary-fixed font-bold cursor-pointer inline focus:outline-none focus:ring-2 focus:ring-secondary/50 rounded px-1"
+                >
+                  browse files
+                </button>
               </h3>
               <p className="text-xs text-on-surface-variant text-center max-w-sm mb-6">
                 For optimal results, ensure the face is well-lit, front-facing, and unobstructed.

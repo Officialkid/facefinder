@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import re
 import shutil
+import threading
 import time
 from typing import Callable, Optional
 from urllib.error import HTTPError, URLError
@@ -143,6 +144,8 @@ def _provider_label(url: str) -> str:
 
 
 def infer_dataset_source_metadata(url: str) -> tuple[str, str]:
+    if url.startswith("local_zip://"):
+        return "Local ZIP Upload", "direct_file"
     resolved_url, source_kind = _resolve_url(url)
     return _provider_label(resolved_url), source_kind
 
@@ -180,9 +183,9 @@ def _normalize_candidate_url(raw_url: str, base_url: str) -> Optional[str]:
         # Only take actual gallery image endpoints
         if "/pw/" not in candidate and "/p/" not in candidate:
             return None
-        # Normalize and strip sizing query
+        # Normalize and strip sizing query to optimal 1024px for fast download & high-accuracy face detection
         base_photo_url = re.sub(r"=[^/]*$", "", candidate)
-        return f"{base_photo_url}=w1920-h1080-no"
+        return f"{base_photo_url}=w1024-h768-no"
 
     # Pixieset special treatment: ensure full size
     if "pxscdn.com" in candidate or "pixieset.com" in candidate:
@@ -552,19 +555,23 @@ def _download_gallery_dataset(
             }
         )
 
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
     aggregate_downloaded_bytes = 0
     prepared_images = 0
-    for index, image_url in enumerate(image_urls, start=1):
-        temp_path = staging_dir / f"provider-image-{index:04d}.part"
+    download_lock = threading.Lock()
+
+    def _download_single(item: tuple[int, str]) -> tuple[int, int, bool]:
+        idx, img_url = item
+        t_path = staging_dir / f"provider-image-{idx:04d}.part"
         try:
-            # Download with retry and adaptive rate-limit handling
-            downloaded_bytes = 0
-            content_type = ""
+            dl_bytes = 0
+            c_type = ""
             for attempt in range(3):
                 try:
-                    downloaded_bytes, _, content_type = _download_to_path(
-                        image_url,
-                        temp_path,
+                    dl_bytes, _, c_type = _download_to_path(
+                        img_url,
+                        t_path,
                         progress_callback=None,
                         referer=page_url,
                     )
@@ -583,35 +590,52 @@ def _download_gallery_dataset(
                         continue
                     raise
 
-            if "image/" not in content_type and "application/octet-stream" not in content_type:
-                temp_path.unlink(missing_ok=True)
-                continue
+            if "image/" not in c_type and "application/octet-stream" not in c_type:
+                t_path.unlink(missing_ok=True)
+                return idx, 0, False
 
-            extension = _extension_from_content_type(content_type, image_url)
-            final_path = staging_dir / f"provider-image-{index:04d}{extension}"
-            if final_path.exists():
-                final_path.unlink()
-            temp_path.replace(final_path)
-            aggregate_downloaded_bytes += downloaded_bytes
-            prepared_images += 1
-
-            if progress_callback:
-                progress_callback(
-                    {
-                        "stage": "dataset_extraction",
-                        "progress_percent": min(28, 22 + int((index / total_images) * 6)),
-                        "dataset_downloaded_bytes": aggregate_downloaded_bytes,
-                        "dataset_files_extracted": prepared_images,
-                        "dataset_total_files": total_images,
-                        "stage_message": f"Prepared {prepared_images} of {total_images} gallery images for scanning.",
-                    }
-                )
+            ext = _extension_from_content_type(c_type, img_url)
+            f_path = staging_dir / f"provider-image-{idx:04d}{ext}"
+            if f_path.exists():
+                f_path.unlink()
+            t_path.replace(f_path)
+            return idx, dl_bytes, True
         except Exception as exc:
-            logger.warning("Skipped gallery image %d (%s) due to error: %s", index, image_url[:60], exc)
-            temp_path.unlink(missing_ok=True)
-            continue
+            logger.warning("Skipped gallery image %d due to error: %s", idx, exc)
+            t_path.unlink(missing_ok=True)
+            return idx, 0, False
         finally:
-            temp_path.unlink(missing_ok=True)
+            t_path.unlink(missing_ok=True)
+
+    # Concurrently download up to 16 images in parallel for ultra-fast staging
+    max_workers = min(16, max(4, os.cpu_count() or 4) * 2)
+    with ThreadPoolExecutor(max_workers=max_workers) as pool:
+        future_map = {
+            pool.submit(_download_single, (idx, img_url)): idx
+            for idx, img_url in enumerate(image_urls, start=1)
+        }
+        for future in as_completed(future_map):
+            try:
+                _, dl_bytes, success = future.result()
+                if success:
+                    with download_lock:
+                        aggregate_downloaded_bytes += dl_bytes
+                        prepared_images += 1
+                        current_prepared = prepared_images
+
+                    if progress_callback:
+                        progress_callback(
+                            {
+                                "stage": "dataset_extraction",
+                                "progress_percent": min(28, 22 + int((current_prepared / total_images) * 6)),
+                                "dataset_downloaded_bytes": aggregate_downloaded_bytes,
+                                "dataset_files_extracted": current_prepared,
+                                "dataset_total_files": total_images,
+                                "stage_message": f"Prepared {current_prepared} of {total_images} gallery images for scanning.",
+                            }
+                        )
+            except Exception as pool_exc:
+                logger.warning("Download worker error: %s", pool_exc)
 
     if prepared_images == 0:
         raise DatasetRetrievalError(
@@ -633,6 +657,26 @@ def download_dataset(
     dataset_dir = session_root / "dataset"
     staging_dir = session_root / "dataset_staging"
     downloads_dir = session_root / "downloads"
+
+    # If dataset was uploaded directly via ZIP, it's already extracted and verified in dataset_dir
+    if url.startswith("local_zip://"):
+        if dataset_dir.exists() and _count_supported_images(dataset_dir) > 0:
+            logger.info("Using pre-extracted local ZIP dataset for session %s at %s", session_id, dataset_dir)
+            if progress_callback:
+                count = _count_supported_images(dataset_dir)
+                progress_callback({
+                    "stage": "dataset_extraction",
+                    "progress_percent": 28,
+                    "dataset_files_extracted": count,
+                    "dataset_total_files": count,
+                    "stage_message": f"Verified {count} photos from uploaded ZIP.",
+                })
+            return str(dataset_dir)
+        else:
+            raise DatasetRetrievalError(
+                ErrorCode.DATASET_EMPTY,
+                "Uploaded ZIP dataset directory is empty or missing.",
+            )
 
     _cleanup_path(dataset_dir)
     _cleanup_path(staging_dir)
