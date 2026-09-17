@@ -39,7 +39,13 @@ timeline
         MTCNN Occlusion Fallback : Sunglasses, hats, and lighting recovery
         Candidate Review Tier : "Is this you?" side-by-side verification
         Dynamic Promotion : POST /confirm-matches with real-time ZIP inclusion
+    section v1.4 High-Speed Multi-Core
+        Neural Engine Pre-Warming : Zero cold-start delay at startup
+        Inference Pre-Scaling : 1200px INTER_AREA downscaling
+        Parallel Scanning : ThreadPoolExecutor multi-core worker pool
+        Live Dynamic ETA : Real-time seconds-remaining countdown
 ```
+
 
 ---
 

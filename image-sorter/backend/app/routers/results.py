@@ -31,6 +31,8 @@ def _get_stage_elapsed_seconds(session) -> float:
 def _get_estimated_remaining_seconds(session, stage_elapsed_seconds: float) -> float | None:
     if session.status == SessionStatus.COMPLETED:
         return 0.0
+    if getattr(session, "estimated_remaining_seconds", None) is not None:
+        return float(session.estimated_remaining_seconds)
     if session.stage != ProcessingStage.DATASET_SCAN:
         return None
     if session.total_images_discovered <= 0 or session.total_images_scanned <= 0:
@@ -45,6 +47,7 @@ def _get_estimated_remaining_seconds(session, stage_elapsed_seconds: float) -> f
         return None
 
     return round(remaining_images / scan_rate, 2)
+
 
 
 @router.get("/{session_id}/status", response_model=StatusResponse, summary="Get processing status")

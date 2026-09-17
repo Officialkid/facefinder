@@ -13,6 +13,7 @@ import os
 
 from app.routers import upload, process, results
 from app.services.cleanup import start_cleanup_scheduler
+from app.services.face_recognition import warmup_models
 from app.services.processing_queue import (
     get_worker_snapshot,
     start_processing_worker,
@@ -30,9 +31,12 @@ async def lifespan(app: FastAPI):
     logger.info("Starting FaceFinder AI API...")
     if RUN_EMBEDDED_WORKER:
         start_processing_worker()
+    # Pre-warm neural network in background so user scans have zero cold-start delay
+    asyncio.create_task(asyncio.to_thread(warmup_models, "ArcFace"))
     # Start background cleanup task
     cleanup_task = asyncio.create_task(start_cleanup_scheduler())
     yield
+
     # Shutdown: cancel cleanup task
     cleanup_task.cancel()
     if RUN_EMBEDDED_WORKER:

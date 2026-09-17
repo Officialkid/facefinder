@@ -122,6 +122,8 @@ class ProcessingSession(BaseModel):
     last_updated_at: datetime = Field(default_factory=utc_now)
     error: Optional[SessionError] = None
     processing_time_seconds: Optional[float] = None
+    estimated_remaining_seconds: Optional[float] = None
+
 
 
 class ProcessRequest(BaseModel):

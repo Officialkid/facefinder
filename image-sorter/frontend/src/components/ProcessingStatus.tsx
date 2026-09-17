@@ -254,17 +254,25 @@ export default function ProcessingStatus({ sessionId, onComplete, onFailed }: Pr
             </div>
           </div>
 
-          {/* Progress Bar */}
-          <div className="w-full max-w-md space-y-2 mt-4">
-            <div className="flex justify-between items-center text-xs font-mono">
-              <span className="text-on-surface-variant truncate max-w-[280px]">
+          {/* Progress Bar & Real-Time Status */}
+          <div className="w-full max-w-lg space-y-2 mt-4">
+            <div className="flex justify-between items-center text-xs font-mono gap-3">
+              <span className="text-on-surface-variant font-medium truncate flex-1" title={status?.stage_message || status?.current_image || "Processing batch..."}>
                 {status?.stage_message || status?.current_image || "Processing batch..."}
               </span>
-              <span className="text-secondary font-bold">{progress}%</span>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                {status?.estimated_remaining_seconds !== null && status?.estimated_remaining_seconds !== undefined && status.estimated_remaining_seconds > 0 && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-secondary/15 border border-secondary/30 text-secondary text-[10px] font-bold">
+                    <span className="material-symbols-outlined text-[12px] animate-pulse">timer</span>
+                    {formatTime(Math.round(status.estimated_remaining_seconds))} left
+                  </span>
+                )}
+                <span className="text-secondary font-bold text-sm">{progress}%</span>
+              </div>
             </div>
-            <div className="w-full h-2 rounded-full bg-surface-variant overflow-hidden">
+            <div className="w-full h-2.5 rounded-full bg-surface-variant overflow-hidden border border-white/5">
               <div
-                className="h-full bg-gradient-to-r from-tertiary to-secondary transition-all duration-500 rounded-full shadow-[0_0_10px_rgba(76,215,246,0.5)]"
+                className="h-full bg-gradient-to-r from-tertiary via-cyan-400 to-secondary transition-all duration-300 rounded-full shadow-[0_0_12px_rgba(76,215,246,0.6)]"
                 style={{ width: `${progress}%` }}
               />
             </div>
@@ -302,15 +310,23 @@ export default function ProcessingStatus({ sessionId, onComplete, onFailed }: Pr
           <div className="glass-panel rounded-xl p-4">
             <span className="font-mono text-[10px] uppercase text-on-surface-variant block">Active Model</span>
             <p className="font-mono text-xs font-bold text-primary truncate mt-2">
-              ArcFace ResNet-50
+              ArcFace (Multi-Core)
             </p>
           </div>
 
           <div className="glass-panel rounded-xl p-4">
-            <span className="font-mono text-[10px] uppercase text-on-surface-variant block">Elapsed Time</span>
-            <p className="font-mono text-xl font-bold text-white mt-1">{formatTime(elapsed)}</p>
+            <span className="font-mono text-[10px] uppercase text-on-surface-variant block">Scan Time / Pace</span>
+            <div className="flex items-baseline gap-2 mt-1">
+              <span className="font-mono text-xl font-bold text-white">{formatTime(elapsed)}</span>
+              {status?.estimated_remaining_seconds ? (
+                <span className="text-[10px] font-mono text-secondary">
+                  (~{Math.round(status.estimated_remaining_seconds)}s left)
+                </span>
+              ) : null}
+            </div>
           </div>
         </div>
+
 
         {/* Academic Benchmark & Efficiency Banner */}
         <div className="glass-panel rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border border-tertiary/20 bg-tertiary/5">
