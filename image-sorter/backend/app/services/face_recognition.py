@@ -188,24 +188,12 @@ def extract_embedding(image_path: str, model_name: str = "ArcFace") -> Optional[
                         key=lambda x: x["facial_area"]["w"] * x["facial_area"]["h"],
                         reverse=True,
                     )
-                    a0 = embedding_objs[0]["facial_area"]["w"] * embedding_objs[0]["facial_area"]["h"]
-                    a1 = embedding_objs[1]["facial_area"]["w"] * embedding_objs[1]["facial_area"]["h"]
-                    total_a = sum(obj["facial_area"]["w"] * obj["facial_area"]["h"] for obj in embedding_objs)
-
-                    # If the largest face is clearly the dominant foreground subject
-                    # (at least 1.8x larger than background faces or > 55% of total face area), select it!
-                    if (a0 >= 1.8 * a1) or (a0 / max(total_a, 1) >= 0.55):
-                        logger.info(
-                            "Dominant foreground face selected from reference image (area ratio: %.1fx vs secondary).",
-                            a0 / max(a1, 1),
-                        )
-                        embedding = np.array(embedding_objs[0]["embedding"], dtype=np.float32)
-                        return embedding
-
-                    raise FaceRecognitionError(
-                        ErrorCode.TOO_MANY_FACES,
-                        "Multiple equally prominent faces were detected in the reference image. Please upload a photo with only yourself or crop it to focus on your face.",
+                    logger.info(
+                        "Multiple faces detected in reference (%d). Auto-selecting the primary largest face.",
+                        len(embedding_objs),
                     )
+                    embedding = np.array(embedding_objs[0]["embedding"], dtype=np.float32)
+                    return embedding
 
                 embedding = np.array(embedding_objs[0]["embedding"], dtype=np.float32)
                 logger.info(
