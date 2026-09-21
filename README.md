@@ -1,6 +1,9 @@
 # FaceFinder AI Workspace
 
-This repository now centers on `FaceFinder AI` as the single active product.
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Officialkid/facefinder/blob/main/FaceFinder_AI_Colab.ipynb)
+
+This repository centers on `FaceFinder AI` as the single active product.
+
 
 Active application paths:
 

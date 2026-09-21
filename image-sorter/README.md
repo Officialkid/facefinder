@@ -6,7 +6,10 @@
 **Institution:** Jomo Kenyatta University of Agriculture and Technology (JKUAT)  
 **Programme:** BSc Information Technology | 2026
 
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Officialkid/facefinder/blob/main/FaceFinder_AI_Colab.ipynb)
+
 ---
+
 
 ## Overview
 
