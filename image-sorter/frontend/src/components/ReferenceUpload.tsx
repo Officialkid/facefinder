@@ -14,7 +14,6 @@ export default function ReferenceUpload({ onSuccess }: Props) {
   const [detectedFaces, setDetectedFaces] = useState<DetectedReferenceFace[] | null>(null);
   const [selectedFaceIdx, setSelectedFaceIdx] = useState<number>(0);
   const [pendingUploadResult, setPendingUploadResult] = useState<UploadResponse | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleSelectedFile = useCallback((file: File) => {
     setError(null);
@@ -198,34 +197,11 @@ export default function ReferenceUpload({ onSuccess }: Props) {
                 </svg>
               </div>
 
-              {/* Direct file input fallback for maximum browser reliability */}
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/jpeg,image/png,image/webp,image/bmp"
-                className="hidden"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) handleSelectedFile(file);
-                }}
-              />
-
               <h3 className="text-lg font-bold text-white mb-2 text-center">
                 Drag and drop your reference portrait here or{" "}
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (fileInputRef.current) {
-                      fileInputRef.current.click();
-                    } else {
-                      open();
-                    }
-                  }}
-                  className="text-secondary underline hover:text-secondary-fixed font-bold cursor-pointer inline focus:outline-none focus:ring-2 focus:ring-secondary/50 rounded px-1"
-                >
+                <span className="text-secondary underline hover:text-secondary-fixed font-bold cursor-pointer inline focus:outline-none rounded px-1">
                   browse files
-                </button>
+                </span>
               </h3>
               <p className="text-xs text-on-surface-variant text-center max-w-sm mb-6">
                 For optimal results, ensure the face is well-lit, front-facing, and unobstructed.

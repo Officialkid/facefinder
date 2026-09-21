@@ -153,8 +153,8 @@ def _generate_detection_variants(image_path: str) -> list[tuple[str, np.ndarray]
 
 def _represent_variant(image: np.ndarray, model_name: str, fast_mode: bool = False):
     DeepFace = _get_deepface()
-    # In fast mode: start with opencv & ssd for 10ms throughput; gracefully fall back to mtcnn for sunglasses/occlusions
-    detectors = ["opencv", "ssd", "mtcnn"] if fast_mode else ["mtcnn", "ssd", "opencv"]
+    # Prioritize SSD and MTCNN to accurately detect all faces (including hats, sunglasses, and head tilts)
+    detectors = ["ssd", "mtcnn", "opencv"]
     last_err = None
     for detector in detectors:
         try:

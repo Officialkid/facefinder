@@ -490,7 +490,7 @@ class SessionAndStatusTests(unittest.TestCase):
         Path(session.reference_image_path).write_bytes(b"fake")
         self.session_store.create_session(session)
 
-        def fake_download_dataset(_url, _session_id, progress_callback=None):
+        def fake_download_dataset(_url, _session_id, progress_callback=None, **kwargs):
             if progress_callback:
                 progress_callback(
                     {
@@ -512,7 +512,10 @@ class SessionAndStatusTests(unittest.TestCase):
                 )
             return str(dataset_dir)
 
-        def fake_scan_dataset(_reference, _dataset, _model, _threshold, progress_callback=None):
+        def fake_scan_dataset(*args, **kwargs):
+            progress_callback = kwargs.get("progress_callback")
+            if not progress_callback and len(args) >= 6:
+                progress_callback = args[5]
             if progress_callback:
                 progress_callback(
                     {
@@ -1025,7 +1028,11 @@ class SessionAndStatusTests(unittest.TestCase):
                 )
             raise AssertionError(f"Unexpected URL requested: {url}")
 
-        with mock.patch("app.services.dataset_retrieval.urllib.request.urlopen", side_effect=fake_urlopen):
+        with mock.patch("app.services.dataset_retrieval.urllib.request.urlopen", side_effect=fake_urlopen), \
+             mock.patch("app.services.dataset_retrieval.urllib.request.build_opener") as mock_build_opener:
+            mock_opener = mock.MagicMock()
+            mock_opener.open.side_effect = fake_urlopen
+            mock_build_opener.return_value = mock_opener
             dataset_dir = Path(self.dataset_retrieval.download_dataset(gallery_url, session_id))
 
         prepared_images = sorted(dataset_dir.glob("*.jpg"))
