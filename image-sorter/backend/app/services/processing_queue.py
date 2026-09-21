@@ -265,6 +265,8 @@ def _run_recognition(session: ProcessingSession) -> None:
             session.dataset_download_url or "",
             session_id,
             progress_callback=on_dataset_progress,
+            email=session.dataset_email,
+            password=session.dataset_password,
         )
         session = _set_processing_state(
             session_id,
@@ -420,6 +422,7 @@ def _run_recognition(session: ProcessingSession) -> None:
         session.images_with_multiple_faces = results["images_with_multiple_faces"]
         session.average_match_confidence = results["average_match_confidence"]
         session.top_match_confidence = results["top_match_confidence"]
+        session.highest_observed_similarity = results.get("highest_observed_similarity")
         session.processing_time_seconds = results["processing_time"]
         session.status = SessionStatus.COMPLETED
         session.stage = ProcessingStage.RESULTS_READY

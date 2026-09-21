@@ -15,6 +15,9 @@ interface Props {
 export default function DatasetForm({ sessionId, referencePreview, selectedFaceIndex, onStarted, onBack }: Props) {
   const [sourceMode, setSourceMode] = useState<"url" | "zip">("url");
   const [datasetUrl, setDatasetUrl] = useState("");
+  const [datasetEmail, setDatasetEmail] = useState("");
+  const [datasetPassword, setDatasetPassword] = useState("");
+  const [showAuthFields, setShowAuthFields] = useState(false);
   const [threshold, setThreshold] = useState(0.45);
   const [modelName, setModelName] = useState<RecognitionModel>("ArcFace");
   const [loading, setLoading] = useState(false);
@@ -87,7 +90,9 @@ export default function DatasetForm({ sessionId, referencePreview, selectedFaceI
         datasetUrl.trim(),
         threshold,
         modelName,
-        selectedFaceIndex
+        selectedFaceIndex,
+        datasetEmail.trim() || undefined,
+        datasetPassword.trim() || undefined
       );
       onStarted();
     } catch (err: any) {
@@ -279,6 +284,66 @@ export default function DatasetForm({ sessionId, referencePreview, selectedFaceI
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-surface border border-white/5 font-mono text-[10px] text-on-surface-variant">
                       Google Drive
                     </span>
+                  </div>
+
+                  {/* Protected Gallery Access (Email & Password/PIN) Accordion */}
+                  <div className="mt-2 pt-2.5 border-t border-white/5">
+                    <button
+                      type="button"
+                      onClick={() => setShowAuthFields(!showAuthFields)}
+                      className="flex items-center gap-1.5 text-xs font-mono text-on-surface-variant hover:text-white transition-colors group"
+                    >
+                      <span className="material-symbols-outlined text-[15px] text-secondary group-hover:scale-110 transition-transform">
+                        {showAuthFields ? "lock_open" : "lock"}
+                      </span>
+                      <span className="font-semibold text-secondary">
+                        {showAuthFields ? "Protected Gallery Credentials" : "🔒 Password or Email Required for Album?"}
+                      </span>
+                      <span className="text-[10px] text-outline ml-1">
+                        (Optional • For Pixieset &amp; private collections)
+                      </span>
+                      <span className="material-symbols-outlined text-[15px] text-outline ml-auto">
+                        {showAuthFields ? "expand_less" : "expand_more"}
+                      </span>
+                    </button>
+
+                    {showAuthFields && (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2.5 animate-fadeIn">
+                        <div>
+                          <label className="block font-mono text-[10px] uppercase tracking-wider text-on-surface-variant mb-1 flex items-center gap-1">
+                            <span className="material-symbols-outlined text-[13px] text-secondary">mail</span>
+                            <span>Visitor Email</span>
+                          </label>
+                          <input
+                            type="email"
+                            value={datasetEmail}
+                            onChange={(e) => setDatasetEmail(e.target.value)}
+                            placeholder="e.g. yourname@example.com"
+                            className="w-full px-3 py-2 bg-surface-container-lowest border border-white/10 rounded-lg text-xs text-white placeholder:text-outline/50 focus:outline-none focus:border-secondary focus:ring-1 focus:ring-secondary font-mono"
+                          />
+                          <p className="font-mono text-[9px] text-outline mt-1">
+                            Unlocks client galleries asking for visitor email.
+                          </p>
+                        </div>
+
+                        <div>
+                          <label className="block font-mono text-[10px] uppercase tracking-wider text-on-surface-variant mb-1 flex items-center gap-1">
+                            <span className="material-symbols-outlined text-[13px] text-secondary">key</span>
+                            <span>Gallery Password or PIN</span>
+                          </label>
+                          <input
+                            type="password"
+                            value={datasetPassword}
+                            onChange={(e) => setDatasetPassword(e.target.value)}
+                            placeholder="e.g. 1234 or album password"
+                            className="w-full px-3 py-2 bg-surface-container-lowest border border-white/10 rounded-lg text-xs text-white placeholder:text-outline/50 focus:outline-none focus:border-secondary focus:ring-1 focus:ring-secondary font-mono"
+                          />
+                          <p className="font-mono text-[9px] text-outline mt-1">
+                            Enter 4-digit PIN or password if protected.
+                          </p>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </>
               ) : (

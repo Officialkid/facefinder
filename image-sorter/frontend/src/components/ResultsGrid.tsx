@@ -79,9 +79,15 @@ export default function ResultsGrid({ sessionId, referencePreview, onReset }: Pr
 
   const topMatchPercent = useMemo(() => {
     const all = [...(results?.matched_images || []), ...(results?.candidate_images || [])];
-    if (!all.length) return 0;
-    const bestSim = Math.max(...all.map((m) => m.similarity_score));
-    return Math.round(bestSim * 100);
+    if (all.length) {
+      const bestSim = Math.max(...all.map((m) => m.similarity_score));
+      return Math.round(bestSim * 100);
+    }
+    const backendTop = results?.top_match_confidence ?? (results as any)?.highest_observed_similarity;
+    if (backendTop) {
+      return Math.round(backendTop * 100);
+    }
+    return 0;
   }, [results]);
 
   const avgMatchPercent = useMemo(() => {
@@ -336,10 +342,12 @@ export default function ResultsGrid({ sessionId, referencePreview, onReset }: Pr
           <h3 className="text-lg font-bold text-white">
             {activeTab === "verified" ? "No High-Confidence Matches Yet" : "No Pending Candidates"}
           </h3>
-          <p className="text-xs text-on-surface-variant max-w-md mx-auto">
+          <p className="text-xs text-on-surface-variant max-w-md mx-auto leading-relaxed">
             {activeTab === "verified" && candidateCount > 0
               ? "We found candidate photos with moderate similarity! Switch to the 'Candidates' tab to confirm which photos are you."
-              : "All photos have been processed."}
+              : topMatchPercent > 0
+              ? `No photos exceeded the high-confidence threshold. The closest face found had a similarity score of ${topMatchPercent}%. Try clicking 'New Search' and lowering the sensitivity threshold (e.g. to 50% or 40%) to include broader matches.`
+              : "All photos have been processed. If no faces were matched, verify that the album contains clear, front-facing photos or adjust your threshold."}
           </p>
           {activeTab === "verified" && candidateCount > 0 && (
             <button

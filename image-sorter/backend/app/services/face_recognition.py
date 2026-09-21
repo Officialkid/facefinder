@@ -78,24 +78,47 @@ def preprocess_image(image_path: str) -> Optional[np.ndarray]:
     """
     Load and preprocess an image for face recognition.
     Caps max dimension at 1200px for high-speed inference (3x speedup).
+    Automatically transposes camera EXIF orientation (crucial for portrait/phone/DSLR event photos).
     Returns None if the image cannot be loaded.
     """
-    cv2 = _get_cv2()
-    img = cv2.imread(image_path)
-    if img is None:
-        logger.warning(f"Could not load image: {image_path}")
-        return None
+    try:
+        from PIL import Image, ImageOps
+        with Image.open(image_path) as pil_img:
+            transposed = ImageOps.exif_transpose(pil_img)
+            if transposed is None:
+                transposed = pil_img
+            if transposed.mode != "RGB":
+                transposed = transposed.convert("RGB")
 
-    # Downscale very large images to 1200px to drastically cut convolution time
-    max_dim = 1200
-    h, w = img.shape[:2]
-    if max(h, w) > max_dim:
-        scale = max_dim / max(h, w)
-        new_w = max(1, int(w * scale))
-        new_h = max(1, int(h * scale))
-        img = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_AREA)
+            # Downscale very large images to 1200px to cut convolution time drastically
+            max_dim = 1200
+            w, h = transposed.size
+            if max(w, h) > max_dim:
+                scale = max_dim / max(w, h)
+                new_w = max(1, int(w * scale))
+                new_h = max(1, int(h * scale))
+                transposed = transposed.resize((new_w, new_h), Image.Resampling.BILINEAR)
 
-    return img
+            rgb_arr = np.array(transposed)
+            cv2 = _get_cv2()
+            return cv2.cvtColor(rgb_arr, cv2.COLOR_RGB2BGR)
+    except Exception as exc:
+        logger.debug("Pillow preprocessing failed for %s (%s), falling back to cv2", image_path, exc)
+        cv2 = _get_cv2()
+        img = cv2.imread(image_path)
+        if img is None:
+            logger.warning(f"Could not load image: {image_path}")
+            return None
+
+        max_dim = 1200
+        h, w = img.shape[:2]
+        if max(h, w) > max_dim:
+            scale = max_dim / max(h, w)
+            new_w = max(1, int(w * scale))
+            new_h = max(1, int(h * scale))
+            img = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_AREA)
+
+        return img
 
 
 
@@ -531,9 +554,10 @@ def scan_dataset(
     scanned_count = 0
     start_scan_time = time.time()
     max_workers = min(3, max(1, os.cpu_count() or 2))
+    highest_observed_similarity = 0.0
 
     def process_image_job(job_tuple):
-        nonlocal scanned_count, images_with_detected_faces, images_without_detected_faces, images_with_multiple_faces, blurry_matches
+        nonlocal scanned_count, images_with_detected_faces, images_without_detected_faces, images_with_multiple_faces, blurry_matches, highest_observed_similarity
         idx, img_path = job_tuple
 
         is_match, is_candidate, similarity, distance, face_count, blur_info = match_face_in_image(
@@ -546,6 +570,8 @@ def scan_dataset(
 
         with lock:
             scanned_count += 1
+            if similarity > highest_observed_similarity:
+                highest_observed_similarity = round(similarity, 4)
             if face_count > 0:
                 images_with_detected_faces += 1
             else:
@@ -634,6 +660,12 @@ def scan_dataset(
         f"Scan complete: {len(matched)} verified, {len(candidates)} candidates out of {len(dataset_paths)} images in {elapsed}s"
     )
 
+    top_score = (
+        all_found[0]["similarity_score"]
+        if all_found
+        else (highest_observed_similarity if highest_observed_similarity > 0.0 else None)
+    )
+
     return {
         "matched": matched,
         "candidates": candidates,
@@ -648,6 +680,7 @@ def scan_dataset(
             sum(item["similarity_score"] for item in all_found) / len(all_found),
             4,
         ) if all_found else None,
-        "top_match_confidence": all_found[0]["similarity_score"] if all_found else None,
+        "top_match_confidence": top_score,
+        "highest_observed_similarity": highest_observed_similarity,
         "processing_time": elapsed,
     }

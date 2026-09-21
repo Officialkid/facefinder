@@ -95,6 +95,8 @@ class ProcessingSession(BaseModel):
     dataset_download_url: Optional[str] = None
     dataset_provider: Optional[str] = None
     dataset_source_kind: Optional[str] = None
+    dataset_email: Optional[str] = None
+    dataset_password: Optional[str] = None
     requested_model_name: Optional[str] = None
     requested_similarity_threshold: Optional[float] = None
     total_images_scanned: int = 0
@@ -108,6 +110,7 @@ class ProcessingSession(BaseModel):
     images_with_multiple_faces: int = 0
     average_match_confidence: Optional[float] = None
     top_match_confidence: Optional[float] = None
+    highest_observed_similarity: Optional[float] = None
     progress_percent: int = Field(default=0, ge=0, le=100)
     stage_message: Optional[str] = None
     current_image: Optional[str] = None
@@ -129,6 +132,14 @@ class ProcessingSession(BaseModel):
 class ProcessRequest(BaseModel):
     session_id: str
     dataset_url: Optional[str] = None
+    dataset_email: Optional[str] = Field(
+        default=None,
+        description="Optional visitor email required to unlock protected online client galleries",
+    )
+    dataset_password: Optional[str] = Field(
+        default=None,
+        description="Optional album password or PIN required to access protected collections",
+    )
     selected_face_index: Optional[int] = Field(
         default=None,
         description="Index of selected face if reference image has multiple people",
@@ -174,6 +185,7 @@ class StatusResponse(BaseModel):
     images_with_multiple_faces: int
     average_match_confidence: Optional[float]
     top_match_confidence: Optional[float]
+    highest_observed_similarity: Optional[float] = None
     current_image: Optional[str]
     queue_position: Optional[int]
     dataset_downloaded_bytes: int
@@ -216,6 +228,7 @@ class ResultsResponse(BaseModel):
     images_with_multiple_faces: int
     average_match_confidence: Optional[float]
     top_match_confidence: Optional[float]
+    highest_observed_similarity: Optional[float] = None
     matched_images: List[MatchedImage]
     candidate_images: List[MatchedImage] = []
     selected_face_index: Optional[int] = None

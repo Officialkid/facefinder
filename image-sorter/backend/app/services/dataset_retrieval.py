@@ -1,6 +1,7 @@
 """Dataset retrieval with stronger staging, cleanup, and archive safety checks."""
 
 import html
+import http.cookiejar
 import logging
 import os
 from pathlib import Path
@@ -198,11 +199,16 @@ def _normalize_candidate_url(raw_url: str, base_url: str) -> Optional[str]:
     return candidate
 
 
-def _extract_pixieset_image_urls(page_html: str, base_url: str) -> list[str]:
+def _extract_pixieset_image_urls(
+    page_html: str,
+    base_url: str,
+    opener: Optional[urllib.request.OpenerDirector] = None,
+    email: Optional[str] = None,
+    password: Optional[str] = None,
+) -> list[str]:
     """
     Extract full-resolution photo URLs from a Pixieset gallery using its client API.
-    Pixieset embeds collectionId, collectionUrlKey, and galleries in the page scripts,
-    then dynamically retrieves photo objects from /client/loadphotos/.
+    Supports email registration, password/PIN verification, and actionable error detection.
     """
     import json
     import urllib.parse
@@ -214,6 +220,12 @@ def _extract_pixieset_image_urls(page_html: str, base_url: str) -> list[str]:
     base_url_match = re.search(r"'baseUrl':\s*['\"]([^'\"]+)['\"]", page_html)
 
     if not (cid_match and cuk_match):
+        # Check if the page itself indicates a login or password gate
+        if any(term in page_html.lower() for term in ("enter password", "password required", "input password", "pin required")):
+            raise DatasetRetrievalError(
+                ErrorCode.DATASET_UNREACHABLE,
+                "This Pixieset gallery is protected by a password or PIN. Please enter the password/PIN in the form above and scan again.",
+            )
         return []
 
     collection_id = int(cid_match.group(1))
@@ -228,6 +240,58 @@ def _extract_pixieset_image_urls(page_html: str, base_url: str) -> list[str]:
                 origin = raw_b if raw_b.endswith("/") else raw_b + "/"
         except Exception:
             pass
+
+    http_client = opener or urllib.request.build_opener()
+
+    # Pre-authenticate visitor email if provided
+    if email:
+        save_email_url = urljoin(origin, "client/saveemail/")
+        try:
+            post_data = urllib.parse.urlencode({
+                "email": email.strip(),
+                "cid": collection_id,
+                "cuk": collection_url_key,
+            }).encode("utf-8")
+            req = urllib.request.Request(
+                save_email_url,
+                data=post_data,
+                headers={
+                    "User-Agent": REQUEST_HEADERS["User-Agent"],
+                    "Referer": base_url,
+                    "X-Requested-With": "XMLHttpRequest",
+                    "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+                },
+            )
+            http_client.open(req, timeout=DOWNLOAD_TIMEOUT_SECONDS)
+            logger.info("Registered visitor email for Pixieset collection %s", collection_id)
+        except Exception as auth_err:
+            logger.debug("Pixieset visitor email registration attempt: %s", auth_err)
+
+    # Pre-authenticate password/PIN if provided
+    if password:
+        verify_pw_url = urljoin(origin, "client/verifypassword/")
+        try:
+            pw_val = password.strip()
+            post_data = urllib.parse.urlencode({
+                "password": pw_val,
+                "pin": pw_val,
+                "cid": collection_id,
+                "cuk": collection_url_key,
+            }).encode("utf-8")
+            req = urllib.request.Request(
+                verify_pw_url,
+                data=post_data,
+                headers={
+                    "User-Agent": REQUEST_HEADERS["User-Agent"],
+                    "Referer": base_url,
+                    "X-Requested-With": "XMLHttpRequest",
+                    "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+                },
+            )
+            http_client.open(req, timeout=DOWNLOAD_TIMEOUT_SECONDS)
+            logger.info("Sent password verification for Pixieset collection %s", collection_id)
+        except Exception as pw_err:
+            logger.debug("Pixieset password verification attempt: %s", pw_err)
 
     path_parts = [p for p in parsed_base.path.split("/") if p]
     target_slug = None
@@ -263,6 +327,13 @@ def _extract_pixieset_image_urls(page_html: str, base_url: str) -> list[str]:
             "page": 0,
             "all": 1,
         }
+        if password:
+            params["pin"] = password.strip()
+            params["password"] = password.strip()
+        if email:
+            params["email"] = email.strip()
+            params["visitor_email"] = email.strip()
+
         req_url = f"{api_endpoint}?{urllib.parse.urlencode(params)}"
         req = urllib.request.Request(
             req_url,
@@ -274,8 +345,25 @@ def _extract_pixieset_image_urls(page_html: str, base_url: str) -> list[str]:
             },
         )
         try:
-            with urllib.request.urlopen(req, timeout=DOWNLOAD_TIMEOUT_SECONDS) as resp:
+            with http_client.open(req, timeout=DOWNLOAD_TIMEOUT_SECONDS) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
+                
+                # Check for explicit Pixieset authentication/gate errors
+                if data.get("status") == "error":
+                    msg = data.get("message") or ""
+                    lower_msg = msg.lower()
+                    if any(k in lower_msg for k in ("password", "pin")):
+                        raise DatasetRetrievalError(
+                            ErrorCode.DATASET_UNREACHABLE,
+                            f"This Pixieset gallery requires a password or PIN ({msg}). Please enter the album password/PIN in the form above and scan again.",
+                        )
+                    if "email" in lower_msg:
+                        raise DatasetRetrievalError(
+                            ErrorCode.DATASET_UNREACHABLE,
+                            f"This Pixieset gallery requires visitor email registration ({msg}). Please enter your email in the form above and scan again.",
+                        )
+                    logger.warning("Pixieset API returned error status for slug '%s': %s", slug, msg)
+
                 if data.get("status") == "success" and data.get("content"):
                     photos = json.loads(data["content"])
                     for p in photos:
@@ -297,6 +385,8 @@ def _extract_pixieset_image_urls(page_html: str, base_url: str) -> list[str]:
                             candidates.append(full_img_url)
                         if len(candidates) >= MAX_GALLERY_IMAGE_COUNT:
                             break
+        except DatasetRetrievalError:
+            raise
         except Exception as exc:
             logger.warning("Failed to fetch Pixieset gallery slug '%s': %s", slug, exc)
             continue
@@ -304,10 +394,22 @@ def _extract_pixieset_image_urls(page_html: str, base_url: str) -> list[str]:
     return candidates
 
 
-def _extract_gallery_image_urls(page_html: str, base_url: str) -> list[str]:
+def _extract_gallery_image_urls(
+    page_html: str,
+    base_url: str,
+    opener: Optional[urllib.request.OpenerDirector] = None,
+    email: Optional[str] = None,
+    password: Optional[str] = None,
+) -> list[str]:
     # Check Pixieset API extraction first
     if "pixieset.com" in base_url.lower():
-        pixieset_urls = _extract_pixieset_image_urls(page_html, base_url)
+        pixieset_urls = _extract_pixieset_image_urls(
+            page_html,
+            base_url,
+            opener=opener,
+            email=email,
+            password=password,
+        )
         if pixieset_urls:
             logger.info("Discovered %d photos via Pixieset client API for %s", len(pixieset_urls), base_url)
             return pixieset_urls
@@ -328,10 +430,11 @@ def _extract_gallery_image_urls(page_html: str, base_url: str) -> list[str]:
 
 
 
-def _fetch_gallery_page(url: str) -> str:
+def _fetch_gallery_page(url: str, opener: Optional[urllib.request.OpenerDirector] = None) -> str:
     req = _build_request(url, method="GET")
+    http_client = opener or urllib.request.build_opener()
     try:
-        with urllib.request.urlopen(req, timeout=DOWNLOAD_TIMEOUT_SECONDS) as response:
+        with http_client.open(req, timeout=DOWNLOAD_TIMEOUT_SECONDS) as response:
             content_type = (response.headers.get("Content-Type") or "").lower()
             if "text/html" not in content_type and "application/xhtml+xml" not in content_type:
                 raise DatasetRetrievalError(
@@ -345,7 +448,7 @@ def _fetch_gallery_page(url: str) -> str:
         if e.code in (401, 403):
             raise DatasetRetrievalError(
                 ErrorCode.DATASET_UNREACHABLE,
-                "The album or gallery link requires a password or login. Please ensure the link is publicly shared.",
+                "This gallery requires a password or email registration to access. Please provide your gallery password or email in the scan form above.",
             ) from e
         raise DatasetRetrievalError(
             ErrorCode.DATASET_UNREACHABLE,
@@ -470,9 +573,11 @@ def _download_to_path(
     target_path: Path,
     progress_callback: Optional[Callable[[dict], None]] = None,
     referer: Optional[str] = None,
+    opener: Optional[urllib.request.OpenerDirector] = None,
 ) -> tuple[int, Optional[int], Optional[str]]:
     req = _build_request(url, method="GET", referer=referer)
-    with urllib.request.urlopen(req, timeout=DOWNLOAD_TIMEOUT_SECONDS) as response:
+    http_client = opener or urllib.request.build_opener()
+    with http_client.open(req, timeout=DOWNLOAD_TIMEOUT_SECONDS) as response:
         content_type = response.headers.get("Content-Type")
         content_length_header = response.headers.get("Content-Length")
         total_bytes = None
@@ -527,10 +632,21 @@ def _download_gallery_dataset(
     page_url: str,
     staging_dir: Path,
     progress_callback: Optional[Callable[[dict], None]] = None,
+    email: Optional[str] = None,
+    password: Optional[str] = None,
 ) -> None:
+    cookie_jar = http.cookiejar.CookieJar()
+    opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cookie_jar))
+
     provider_name = _provider_label(page_url)
-    page_html = _fetch_gallery_page(page_url)
-    image_urls = _extract_gallery_image_urls(page_html, page_url)
+    page_html = _fetch_gallery_page(page_url, opener=opener)
+    image_urls = _extract_gallery_image_urls(
+        page_html,
+        page_url,
+        opener=opener,
+        email=email,
+        password=password,
+    )
 
     if not image_urls:
         raise DatasetRetrievalError(
@@ -574,6 +690,7 @@ def _download_gallery_dataset(
                         t_path,
                         progress_callback=None,
                         referer=page_url,
+                        opener=opener,
                     )
                     break
                 except HTTPError as http_err:
@@ -593,6 +710,25 @@ def _download_gallery_dataset(
             if "image/" not in c_type and "application/octet-stream" not in c_type:
                 t_path.unlink(missing_ok=True)
                 return idx, 0, False
+
+            # Verify downloaded file size and magic bytes to guarantee real image content
+            if not t_path.exists() or t_path.stat().st_size < 1000:
+                t_path.unlink(missing_ok=True)
+                return idx, 0, False
+
+            with open(t_path, "rb") as check_f:
+                magic = check_f.read(16)
+                is_valid = (
+                    magic.startswith(b"\xff\xd8\xff")  # JPEG
+                    or magic.startswith(b"\x89PNG")     # PNG
+                    or (magic.startswith(b"RIFF") and b"WEBP" in magic[:16]) # WEBP
+                    or magic.startswith(b"BM")          # BMP
+                    or magic.startswith(b"II*\x00") or magic.startswith(b"MM\x00*") # TIFF
+                )
+                if not is_valid:
+                    logger.warning("File %d header failed image magic check: %s", idx, magic[:8])
+                    t_path.unlink(missing_ok=True)
+                    return idx, 0, False
 
             ext = _extension_from_content_type(c_type, img_url)
             f_path = staging_dir / f"provider-image-{idx:04d}{ext}"
@@ -640,7 +776,7 @@ def _download_gallery_dataset(
     if prepared_images == 0:
         raise DatasetRetrievalError(
             ErrorCode.DATASET_EMPTY,
-            f"Could not download images from the public {provider_name} gallery. Please check that the album is publicly shared and accessible.",
+            f"Could not download images from the public {provider_name} gallery. Please check that the album is publicly accessible, or provide the password/email if protected.",
         )
 
 
@@ -648,6 +784,8 @@ def download_dataset(
     url: str,
     session_id: str,
     progress_callback: Optional[Callable[[dict], None]] = None,
+    email: Optional[str] = None,
+    password: Optional[str] = None,
 ) -> str:
     """
     Download a dataset into a session-specific staging folder.
@@ -724,6 +862,8 @@ def download_dataset(
                 resolved_url,
                 staging_dir,
                 progress_callback=progress_callback,
+                email=email,
+                password=password,
             )
         else:
             downloaded_bytes, total_bytes, content_type = _download_to_path(

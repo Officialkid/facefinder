@@ -96,6 +96,7 @@ export interface StatusResponse {
   images_with_multiple_faces: number;
   average_match_confidence: number | null;
   top_match_confidence: number | null;
+  highest_observed_similarity?: number | null;
   current_image: string | null;
   queue_position: number | null;
   dataset_downloaded_bytes: number;
@@ -311,6 +312,8 @@ export const ImageSorterAPI = {
     similarity_threshold: number = 0.45,
     model_name: RecognitionModel = "ArcFace",
     selected_face_index: number | null = null,
+    dataset_email?: string,
+    dataset_password?: string,
   ): Promise<ProcessStartResponse> => {
     const { data } = await api.post<ProcessStartResponse>("/process/start", {
       session_id,
@@ -318,6 +321,8 @@ export const ImageSorterAPI = {
       similarity_threshold,
       model_name,
       selected_face_index,
+      dataset_email: dataset_email || undefined,
+      dataset_password: dataset_password || undefined,
     });
     return data;
   },
