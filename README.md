@@ -2,7 +2,13 @@
 
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Officialkid/facefinder/blob/main/FaceFinder_AI_Colab.ipynb)
 
+> **Copyright © 2026 Daniel Mwalili Mutinda. All Rights Reserved.**  
+> **Student Reg:** SCT221-C004-0765/2022 | **Supervisor:** Dr. Judy Gateri  
+> **Institution:** Jomo Kenyatta University of Agriculture and Technology (JKUAT)  
+> *Notice: This repository and its algorithms are proprietary academic intellectual property created for BSc Information Technology degree evaluation. Commercialization, reproduction, or redistribution without written authorization is strictly prohibited.*
+
 This repository centers on `FaceFinder AI` as the single active product.
+
 
 
 Active application paths:

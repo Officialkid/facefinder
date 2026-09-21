@@ -1,0 +1,53 @@
+PROPRIETARY ACADEMIC RESEARCH & EVALUATION LICENSE
+
+Copyright (c) 2026 Daniel Mwalili Mutinda. All Rights Reserved.
+Author: Daniel Mwalili Mutinda
+Registration Number: SCT221-C004-0765/2022
+Degree: Bachelor of Science in Information Technology
+Supervisor: Dr. Judy Gateri
+Institution: Jomo Kenyatta University of Agriculture and Technology (JKUAT)
+Project: FaceFinder AI (AI-Powered Photo Retrieval System)
+
+================================================================================
+TERMS AND CONDITIONS OF ACADEMIC EVALUATION
+================================================================================
+
+1. OWNERSHIP & INTELLECTUAL PROPERTY:
+   The software, algorithms, architecture, mathematical representations, source
+   code, models, and associated documentation contained in this repository are the
+   exclusive intellectual property of Daniel Mwalili Mutinda ("the Author").
+
+2. PERMITTED USE (ACADEMIC ASSESSMENT ONLY):
+   Permission is hereby granted solely to appointed academic supervisors,
+   internal and external examiners, and faculty members of Jomo Kenyatta
+   University of Agriculture and Technology (JKUAT) to review, execute, and
+   evaluate this software strictly for the academic grading and assessment
+   of the Author's undergraduate degree fulfillment.
+
+3. PROHIBITIONS:
+   Unless explicitly authorized in writing by the Author:
+   a. NO COMMERCIAL USE: No individual, institution, or commercial entity may
+      sell, license, monetize, or derive commercial revenue from this software,
+      its ideas, or any derivative works.
+   b. NO REDISTRIBUTION: Reproduction, re-publishing, distribution, sublicensing,
+      or transmission of this codebase, in whole or in part, is strictly prohibited.
+   c. NO DERIVATIVE OR COMPETING WORKS: Reverse engineering, modifying, copying,
+      or incorporating these proprietary retrieval pipelines into another product
+      or public repository is not permitted.
+   d. NO PATENT OR TRADEMARK CLAIMS: No person or organization may file patent,
+      copyright, or trademark claims on the algorithms, designs, or workflows
+      disclosed herein.
+
+4. PRIOR ART & PROOF OF AUTHORSHIP:
+   The commit history, cryptographic hashes, and git timestamps of this
+   repository constitute verifiable legal prior art and indisputable proof of
+   authorship by Daniel Mwalili Mutinda dating from the project's inception.
+
+5. DISCLAIMER OF WARRANTY:
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+   IMPLIED. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY CLAIM, DAMAGES, OR
+   OTHER LIABILITY ARISING OUT OF THE USE OF THIS SOFTWARE.
+
+================================================================================
+For licensing inquiries or commercial use permissions, contact:
+Daniel Mwalili Mutinda | danielmwalili1@gmail.com

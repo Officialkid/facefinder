@@ -8,7 +8,11 @@
 
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Officialkid/facefinder/blob/main/FaceFinder_AI_Colab.ipynb)
 
+> **Copyright © 2026 Daniel Mwalili Mutinda. All Rights Reserved.**  
+> *Notice: Created exclusively for BSc IT academic degree evaluation at JKUAT. All algorithms, neural pipelines, and source implementations are legally protected prior art. Commercial use, public redistribution, or reproduction without written permission is strictly prohibited.*
+
 ---
+
 
 
 ## Overview
