@@ -226,29 +226,54 @@ async def get_worker_status():
 @router.get("/{session_id}/download/{file_path:path}", summary="Download a matched image")
 async def download_image(session_id: str, file_path: str):
     """
-    Download a specific matched image by filename.
-    Only available for active (non-expired) sessions.
+    Download or preview a specific matched image by filename or relative path.
+    Available for active sessions during and after processing.
     """
     session = get_session(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found or expired.")
 
-    if session.status != SessionStatus.COMPLETED:
-        raise HTTPException(status_code=400, detail="Processing not yet completed.")
-
-    dataset_dir = get_session_temp_dir(session_id) / "dataset"
+    session_dir = get_session_temp_dir(session_id).resolve()
     requested_path = Path(file_path)
-    resolved_path = (dataset_dir / requested_path).resolve()
-    dataset_root = dataset_dir.resolve()
-    if dataset_root not in resolved_path.parents and resolved_path != dataset_root:
-        raise HTTPException(status_code=400, detail="Invalid image path.")
-    if not resolved_path.exists() or not resolved_path.is_file():
+
+    # Search in dataset directory, staging directory, and session dir
+    candidate_roots = [
+        session_dir / "dataset",
+        session_dir / "dataset_staging",
+        session_dir,
+    ]
+
+    target_file = None
+    for root in candidate_roots:
+        if not root.exists():
+            continue
+        cand = (root / requested_path).resolve()
+        if session_dir in cand.parents and cand.is_file():
+            target_file = cand
+            break
+        cand_name = (root / requested_path.name).resolve()
+        if session_dir in cand_name.parents and cand_name.is_file():
+            target_file = cand_name
+            break
+
+    if target_file is None:
+        for match in session_dir.rglob(requested_path.name):
+            if match.is_file() and session_dir in match.resolve().parents:
+                target_file = match.resolve()
+                break
+
+    if target_file is None:
         raise HTTPException(status_code=404, detail=f"Image '{requested_path.as_posix()}' not found.")
 
+    import mimetypes
+    media_type, _ = mimetypes.guess_type(target_file.name)
+    if not media_type or not media_type.startswith("image/"):
+        media_type = "image/jpeg"
+
     return FileResponse(
-        path=str(resolved_path),
-        filename=resolved_path.name,
-        media_type="image/jpeg",
+        path=str(target_file),
+        filename=target_file.name,
+        media_type=media_type,
     )
 
 
@@ -263,10 +288,9 @@ async def download_all_matches(session_id: str):
     if not session:
         raise HTTPException(status_code=404, detail="Session not found or expired.")
 
-    if session.status != SessionStatus.COMPLETED:
-        raise HTTPException(status_code=400, detail="Processing not yet completed.")
-
     if not session.matched_images:
+        if session.status == SessionStatus.PROCESSING:
+            raise HTTPException(status_code=400, detail="No matches found yet. Please wait as more photos are scanned.")
         raise HTTPException(status_code=404, detail="No matched images to download.")
 
     dataset_dir = get_session_temp_dir(session_id) / "dataset"
