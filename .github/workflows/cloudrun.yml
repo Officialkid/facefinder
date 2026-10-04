@@ -1,4 +1,4 @@
-name: Build and Deploy FaceFinder AI Backend
+name: Deploy FaceFinder AI Backend to Cloud Run
 
 on:
   push:
@@ -13,87 +13,63 @@ jobs:
       id-token: write
 
     env:
-      PROJECT_ID: ${{ secrets.GCP_PROJECT_ID != '' && secrets.GCP_PROJECT_ID || 'facefinder-prod' }}
-      REGION: ${{ secrets.GCP_REGION != '' && secrets.GCP_REGION || 'us-central1' }}
-      SERVICE_NAME: ${{ secrets.CLOUD_RUN_SERVICE != '' && secrets.CLOUD_RUN_SERVICE || 'image-sorter-api' }}
-      REPOSITORY: ${{ secrets.GAR_REPOSITORY != '' && secrets.GAR_REPOSITORY || 'image-sorter' }}
-      IMAGE_NAME: image-sorter-backend
-      CLOUD_RUN_DEPLOY: ${{ secrets.CLOUD_RUN_DEPLOY != '' && secrets.CLOUD_RUN_DEPLOY || 'true' }}
-      GCP_WORKLOAD_IDENTITY_PROVIDER: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER != '' && secrets.GCP_WORKLOAD_IDENTITY_PROVIDER || 'projects/385300455062/locations/global/workloadIdentityPools/github-pool/providers/github-provider' }}
-      GCP_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT != '' && secrets.GCP_SERVICE_ACCOUNT || 'github-deployer@facefinder-prod.iam.gserviceaccount.com' }}
-      GCP_CREDENTIALS_JSON: ${{ secrets.GCP_CREDENTIALS_JSON }}
+      PROJECT_ID: ${{ secrets.GCP_PROJECT_ID || 'facefinder-ai' }}
+      REGION: ${{ secrets.GCP_REGION || 'us-central1' }}
+      SERVICE_NAME: ${{ secrets.CLOUD_RUN_SERVICE || 'facefinder-backend' }}
+      REPOSITORY: ${{ secrets.GAR_REPOSITORY || 'facefinder' }}
+      IMAGE_NAME: facefinder-backend
+      GCP_CREDENTIALS_JSON: ${{ secrets.GCP_CREDENTIALS_JSON || secrets.GCP_SA_KEY }}
 
     steps:
-      - name: Checkout
+      - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Validate auth configuration
-        id: validate_auth
+      - name: Check Authentication Secrets
+        id: check_auth
         run: |
-          if [ -n "${{ env.GCP_CREDENTIALS_JSON }}" ] && [ -n "${{ env.GCP_WORKLOAD_IDENTITY_PROVIDER }}" ]; then
-            echo "Error: Set only one auth method: either GCP_CREDENTIALS_JSON OR (GCP_WORKLOAD_IDENTITY_PROVIDER + GCP_SERVICE_ACCOUNT)."
-            exit 1
+          if [ -z "${{ env.GCP_CREDENTIALS_JSON }}" ]; then
+            echo "::warning::GCP_CREDENTIALS_JSON secret is not set in GitHub repository settings. Skipping Cloud Run deploy step."
+            echo "has_auth=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_auth=true" >> "$GITHUB_OUTPUT"
           fi
 
-          if [ -n "${{ env.GCP_CREDENTIALS_JSON }}" ]; then
-            echo "Using credentials_json authentication."
-            echo "workload_identity_provider=" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          if [ -n "${{ env.GCP_WORKLOAD_IDENTITY_PROVIDER }}" ] && [ -n "${{ env.GCP_SERVICE_ACCOUNT }}" ]; then
-            provider="${{ env.GCP_WORKLOAD_IDENTITY_PROVIDER }}"
-            provider="${provider#//iam.googleapis.com/}"
-
-            if [[ ! "$provider" =~ ^projects/[0-9]+/locations/global/workloadIdentityPools/[^/]+/providers/[^/]+$ ]]; then
-              echo "Error: GCP_WORKLOAD_IDENTITY_PROVIDER must be in format 'projects/PROJECT_NUMBER/locations/global/workloadIdentityPools/POOL_ID/providers/PROVIDER_ID'."
-              exit 1
-            fi
-
-            echo "workload_identity_provider=$provider" >> "$GITHUB_OUTPUT"
-            echo "Using workload identity provider authentication."
-            exit 0
-          fi
-
-          echo "Error: Missing auth secrets. Provide either GCP_CREDENTIALS_JSON or both GCP_WORKLOAD_IDENTITY_PROVIDER and GCP_SERVICE_ACCOUNT."
-          exit 1
-
-      - name: Authenticate to Google Cloud (Workload Identity)
-        if: ${{ env.GCP_CREDENTIALS_JSON == '' }}
-        uses: google-github-actions/auth@v2
-        with:
-          workload_identity_provider: ${{ steps.validate_auth.outputs.workload_identity_provider }}
-          service_account: ${{ env.GCP_SERVICE_ACCOUNT }}
-
-      - name: Authenticate to Google Cloud (Credentials JSON)
-        if: ${{ env.GCP_CREDENTIALS_JSON != '' }}
+      - name: Authenticate to Google Cloud
+        if: steps.check_auth.outputs.has_auth == 'true'
         uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ env.GCP_CREDENTIALS_JSON }}
 
-      - name: Set up gcloud
+      - name: Set up Cloud SDK
+        if: steps.check_auth.outputs.has_auth == 'true'
         uses: google-github-actions/setup-gcloud@v2
 
-      - name: Configure Docker auth
-        run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
-
-      - name: Build and push image
+      - name: Configure Docker for Google Container Registry
+        if: steps.check_auth.outputs.has_auth == 'true'
         run: |
-          IMAGE_URI=${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
-          docker build -t $IMAGE_URI .
-          docker push $IMAGE_URI
-          echo "IMAGE_URI=$IMAGE_URI" >> $GITHUB_ENV
+          gcloud auth configure-docker gcr.io --quiet
+
+      - name: Build and Push Docker Image
+        if: steps.check_auth.outputs.has_auth == 'true'
+        run: |
+          IMAGE_URI="gcr.io/${{ env.PROJECT_ID }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
+          LATEST_URI="gcr.io/${{ env.PROJECT_ID }}/${{ env.IMAGE_NAME }}:latest"
+          docker build -t "$IMAGE_URI" -t "$LATEST_URI" -f Dockerfile .
+          docker push "$IMAGE_URI"
+          docker push "$LATEST_URI"
+          echo "IMAGE_URI=$IMAGE_URI" >> "$GITHUB_ENV"
 
       - name: Deploy to Cloud Run
-        if: ${{ env.CLOUD_RUN_DEPLOY == 'true' }}
+        if: steps.check_auth.outputs.has_auth == 'true'
         run: |
           gcloud run deploy ${{ env.SERVICE_NAME }} \
-            --image $IMAGE_URI \
+            --image "$IMAGE_URI" \
             --platform managed \
             --region ${{ env.REGION }} \
             --allow-unauthenticated \
-            --port 8000 \
+            --port 8080 \
             --memory 2Gi \
-            --timeout 900 \
+            --cpu 2 \
+            --timeout 1800 \
             --min-instances 0 \
             --max-instances 5

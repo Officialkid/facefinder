@@ -2,7 +2,8 @@ FROM python:3.11-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=1
+    PIP_NO_CACHE_DIR=1 \
+    PORT=8080
 
 WORKDIR /app
 
@@ -17,15 +18,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-COPY image-sorter/backend/requirements.txt /app/image-sorter/backend/requirements.txt
-RUN python -m pip install --upgrade pip && pip install -r /app/image-sorter/backend/requirements.txt
+COPY requirements.txt /app/requirements.txt
+RUN python -m pip install --upgrade pip && pip install -r /app/requirements.txt
 
 # Pre-download ArcFace model weights into the container image for zero cold-start delay
 RUN python -c "from deepface import DeepFace; DeepFace.build_model('ArcFace')" || true
 
-COPY image-sorter/backend /app/image-sorter/backend
-
-WORKDIR /app/image-sorter/backend
+COPY . /app
 
 EXPOSE 8080
 
