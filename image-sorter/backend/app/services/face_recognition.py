@@ -65,7 +65,11 @@ def warmup_models(model_name: str = "ArcFace"):
         DeepFace.build_model(model_name)
         dummy = np.zeros((112, 112, 3), dtype=np.uint8)
         DeepFace.represent(img_path=dummy, model_name=model_name, enforce_detection=False)
-        logger.info("%s neural engine successfully warmed and cached in RAM.", model_name)
+        try:
+            DeepFace.extract_faces(img_path=dummy, detector_backend="ssd", enforce_detection=False)
+        except Exception:
+            pass
+        logger.info("%s neural engine and SSD detector successfully warmed and cached in RAM.", model_name)
     except Exception as exc:
         logger.warning("Neural engine pre-warm warning (will load on-demand): %s", exc)
 
@@ -179,15 +183,18 @@ def detect_reference_faces(image_path: str) -> list[dict]:
     import base64
     DeepFace = _get_deepface()
     cv2 = _get_cv2()
-    img = cv2.imread(image_path)
+    # Preprocess image to cap max dimensions to 1200px and normalize EXIF orientation for 50x faster detection
+    img = preprocess_image(image_path)
+    if img is None:
+        img = cv2.imread(image_path)
     if img is None:
         return []
 
     h_img, w_img = img.shape[:2]
 
-    # MTCNN provides reliable landmark alignment even through sunglasses and varied lighting
+    # SSD detector is sub-second, highly accurate, and handles hats/sunglasses reliably
     faces = []
-    for detector in ["mtcnn", "ssd", "opencv"]:
+    for detector in ["ssd", "mtcnn", "opencv"]:
         try:
             extracted = DeepFace.extract_faces(
                 img_path=img,

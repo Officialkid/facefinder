@@ -64,7 +64,11 @@ export default function ReferenceUpload({ onSuccess }: Props) {
         onSuccess(result, preview!, 0);
       }
     } catch (err: any) {
-      const msg = err?.response?.data?.detail ?? "Upload failed. Please check your image and try again.";
+      const msg =
+        err?.response?.data?.detail ??
+        (err?.code === "ECONNABORTED"
+          ? "Analysis timed out. Please try uploading the image again."
+          : err?.message ?? "Upload failed. Please check your image and try again.");
       setError(msg);
     } finally {
       setUploading(false);
