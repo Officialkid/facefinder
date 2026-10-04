@@ -157,8 +157,8 @@ def _generate_detection_variants(image_path: str) -> list[tuple[str, np.ndarray]
 
 def _represent_variant(image: np.ndarray, model_name: str, fast_mode: bool = False):
     DeepFace = _get_deepface()
-    # Prioritize SSD and MTCNN to accurately detect all faces (including hats, sunglasses, and head tilts)
-    detectors = ["ssd", "mtcnn", "opencv"]
+    # Fast mode for batch scanning: SSD + OpenCV only (ultra-fast, avoids expensive MTCNN pyramid on non-face photos)
+    detectors = ["ssd", "opencv"] if fast_mode else ["ssd", "mtcnn", "opencv"]
     last_err = None
     for detector in detectors:
         try:
@@ -635,7 +635,14 @@ def scan_dataset(
 
             progress_pct = min(95, 40 + int((scanned_count / total_paths) * 55))
 
-            if progress_callback:
+            should_notify = (
+                is_match
+                or is_candidate
+                or (scanned_count % 5 == 0)
+                or (scanned_count == total_paths)
+            )
+
+            if progress_callback and should_notify:
                 progress_callback(
                     {
                         "stage": "dataset_scan",
