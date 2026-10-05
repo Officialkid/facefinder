@@ -20,8 +20,11 @@ logger = logging.getLogger(__name__)
 # the FastAPI app starts quickly even on cold boot.
 # ---------------------------------------------------------------------------
 
+import threading
+
 _deepface = None
 _cv2 = None
+_inference_lock = threading.Lock()
 
 
 class FaceRecognitionError(Exception):
@@ -162,12 +165,13 @@ def _represent_variant(image: np.ndarray, model_name: str, fast_mode: bool = Fal
     last_err = None
     for detector in detectors:
         try:
-            return DeepFace.represent(
-                img_path=image,
-                model_name=model_name,
-                enforce_detection=True,
-                detector_backend=detector,
-            )
+            with _inference_lock:
+                return DeepFace.represent(
+                    img_path=image,
+                    model_name=model_name,
+                    enforce_detection=True,
+                    detector_backend=detector,
+                )
         except Exception as err:
             last_err = err
             continue
@@ -196,11 +200,12 @@ def detect_reference_faces(image_path: str) -> list[dict]:
     faces = []
     for detector in ["ssd", "mtcnn", "opencv"]:
         try:
-            extracted = DeepFace.extract_faces(
-                img_path=img,
-                detector_backend=detector,
-                enforce_detection=True,
-            )
+            with _inference_lock:
+                extracted = DeepFace.extract_faces(
+                    img_path=img,
+                    detector_backend=detector,
+                    enforce_detection=True,
+                )
             if extracted:
                 faces = extracted
                 break
@@ -320,22 +325,24 @@ def extract_embedding(
                         reps = None
                         for det in ["ssd", "opencv"]:
                             try:
-                                reps = DeepFace.represent(
-                                    img_path=face_crop,
-                                    model_name=model_name,
-                                    enforce_detection=True,
-                                    detector_backend=det,
-                                )
+                                with _inference_lock:
+                                    reps = DeepFace.represent(
+                                        img_path=face_crop,
+                                        model_name=model_name,
+                                        enforce_detection=True,
+                                        detector_backend=det,
+                                    )
                                 if reps:
                                     break
                             except Exception:
                                 continue
                         if not reps:
-                            reps = DeepFace.represent(
-                                img_path=face_crop,
-                                model_name=model_name,
-                                enforce_detection=False,
-                            )
+                            with _inference_lock:
+                                reps = DeepFace.represent(
+                                    img_path=face_crop,
+                                    model_name=model_name,
+                                    enforce_detection=False,
+                                )
                         if reps:
                             logger.info(
                                 "Extracted aligned embedding for targeted face %d (%s-D)",
@@ -577,7 +584,7 @@ def scan_dataset(
     lock = threading.Lock()
     scanned_count = 0
     start_scan_time = time.time()
-    max_workers = min(3, max(1, os.cpu_count() or 2))
+    max_workers = 2
     highest_observed_similarity = 0.0
 
     def process_image_job(job_tuple):
