@@ -86,10 +86,32 @@ export default function ProcessingStatus({ sessionId, onComplete, onFailed }: Pr
   }, [sessionId, onComplete, onFailed]);
 
   const progress = status ? Math.min(100, Math.max(10, Math.round(status.progress_percent))) : 15;
-  const currentStageIndex = Math.min(
-    CHECKPOINTS.length,
-    Math.max(1, Math.floor((progress / 100) * CHECKPOINTS.length))
-  );
+  const currentStageIndex = (() => {
+    if (!status) return 1;
+    if (status.status === "completed" || status.stage === "results_ready") return 8;
+
+    switch (status.stage) {
+      case "queued":
+      case "upload_received":
+      case "dataset_validation":
+        return 1;
+      case "dataset_download":
+        return 2;
+      case "dataset_extraction":
+        return 3;
+      case "reference_analysis":
+        return status.progress_percent >= 34 ? 5 : 4;
+      case "dataset_scan":
+        if (status.progress_percent >= 85) return 8;
+        if (status.progress_percent >= 65) return 7;
+        return 6;
+      default:
+        return Math.min(
+          CHECKPOINTS.length,
+          Math.max(1, Math.round((progress / 100) * CHECKPOINTS.length))
+        );
+    }
+  })();
 
   const formatTime = (secs: number) => {
     const m = Math.floor(secs / 60);
