@@ -59,6 +59,9 @@ export default function ProcessingStatus({ sessionId, onComplete, onFailed }: Pr
     return () => clearInterval(timer);
   }, []);
 
+  const [isScanComplete, setIsScanComplete] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
   useEffect(() => {
     let intervalId: NodeJS.Timeout;
 
@@ -68,8 +71,8 @@ export default function ProcessingStatus({ sessionId, onComplete, onFailed }: Pr
         setStatus(data);
 
         if (data.status === "completed") {
+          setIsScanComplete(true);
           clearInterval(intervalId);
-          setTimeout(() => onComplete(), 1500);
         } else if (data.status === "failed" || data.status === "expired") {
           clearInterval(intervalId);
           onFailed(data.error ?? null);
@@ -83,7 +86,24 @@ export default function ProcessingStatus({ sessionId, onComplete, onFailed }: Pr
     intervalId = setInterval(checkStatus, 1500);
 
     return () => clearInterval(intervalId);
-  }, [sessionId, onComplete, onFailed]);
+  }, [sessionId, onFailed]);
+
+  const handleFinalizeVerification = async () => {
+    setIsSubmitting(true);
+    const confirmedFilenames = Object.entries(confirmedMap)
+      .filter(([_, isYes]) => isYes === true)
+      .map(([filename]) => filename);
+
+    if (confirmedFilenames.length > 0) {
+      try {
+        await ImageSorterAPI.confirmCandidateMatches(sessionId, confirmedFilenames);
+      } catch (err) {
+        console.error("Failed confirming matches:", err);
+      }
+    }
+    setIsSubmitting(false);
+    onComplete();
+  };
 
   const progress = status ? Math.min(100, Math.max(10, Math.round(status.progress_percent))) : 15;
   const currentStageIndex = (() => {
@@ -419,12 +439,37 @@ export default function ProcessingStatus({ sessionId, onComplete, onFailed }: Pr
         {/* Live Discovered Candidates: "Is this you?" Verification Stream */}
         {liveMatches.length > 0 && (
           <div className="glass-panel rounded-2xl p-5 sm:p-6 border border-tertiary/30 bg-surface-container/40 relative overflow-hidden animate-in fade-in slide-in-from-bottom-3 duration-500">
+            {isScanComplete && (
+              <div className="mb-4 p-4 rounded-xl bg-tertiary/10 border border-tertiary/40 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-in fade-in duration-300">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-lg bg-tertiary/20 border border-tertiary/40 flex items-center justify-center flex-shrink-0">
+                    <span className="material-symbols-outlined text-tertiary text-xl">verified</span>
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-white font-headline">Neural Scan Complete — Verification Required</h4>
+                    <p className="text-xs text-on-surface-variant mt-0.5">
+                      Review each matched photo below. Tap <strong className="text-tertiary">Yes</strong> for photos of you and <strong className="text-error">No</strong> to dismiss non-matches, then click below to finalize.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleFinalizeVerification}
+                  disabled={isSubmitting}
+                  className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-tertiary to-primary text-black font-bold font-mono text-xs shadow-lg hover:brightness-110 active:scale-95 transition-all flex items-center gap-1.5 flex-shrink-0"
+                >
+                  <span className="material-symbols-outlined text-sm font-bold">check_circle</span>
+                  <span>Confirm Verified Photos ({confirmedCount})</span>
+                </button>
+              </div>
+            )}
+
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4 pb-3 border-b border-white/10">
               <div>
                 <div className="flex items-center gap-2">
                   <span className="w-2.5 h-2.5 rounded-full bg-tertiary animate-ping" />
                   <h3 className="font-display text-lg sm:text-xl font-bold text-white">
-                    Live Found Matches ({liveMatches.length})
+                    Found Matches for Verification ({liveMatches.length})
                   </h3>
                   {confirmedCount > 0 && (
                     <span className="px-2 py-0.5 rounded-full bg-tertiary/20 text-tertiary text-xs font-mono font-bold border border-tertiary/40">
@@ -438,16 +483,17 @@ export default function ProcessingStatus({ sessionId, onComplete, onFailed }: Pr
                   )}
                 </div>
                 <p className="font-sans text-xs text-on-surface-variant mt-1">
-                  Confirm your photos as they are scanned. Tap <strong className="text-tertiary">Yes</strong> or <strong className="text-error">No</strong>:
+                  You have full control: tap <strong className="text-tertiary">Yes</strong> to verify or <strong className="text-error">No</strong> to dismiss each photo:
                 </p>
               </div>
 
               <button
                 type="button"
-                onClick={() => onComplete()}
+                onClick={handleFinalizeVerification}
+                disabled={isSubmitting}
                 className="px-4 py-2 rounded-xl bg-gradient-to-r from-primary to-secondary text-on-primary text-xs font-bold font-mono flex items-center gap-1.5 shadow-md hover:brightness-110 transition-all"
               >
-                <span>View Full Results</span>
+                <span>{isScanComplete ? `✓ Confirm & Finish (${confirmedCount})` : `View Results (${confirmedCount})`}</span>
                 <span className="material-symbols-outlined text-sm">arrow_forward</span>
               </button>
             </div>
@@ -538,6 +584,32 @@ export default function ProcessingStatus({ sessionId, onComplete, onFailed }: Pr
                   </div>
                 );
               })}
+            </div>
+
+            {/* Bottom Verification Action Bar */}
+            <div className="mt-5 pt-4 border-t border-white/10 flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div className="flex items-center gap-2 text-xs font-mono">
+                <span className="px-2.5 py-1 rounded-full bg-tertiary/20 text-tertiary font-bold border border-tertiary/40">
+                  {confirmedCount} Confirmed as Me
+                </span>
+                <span className="px-2.5 py-1 rounded-full bg-error/20 text-error font-bold border border-error/40">
+                  {rejectedCount} Dismissed
+                </span>
+                <span className="text-on-surface-variant">
+                  ({liveMatches.length - (confirmedCount + rejectedCount)} unreviewed)
+                </span>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleFinalizeVerification}
+                disabled={isSubmitting}
+                className="w-full sm:w-auto px-6 py-3 rounded-xl bg-gradient-to-r from-tertiary via-cyan-400 to-primary text-black font-bold font-mono text-xs shadow-xl hover:brightness-110 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-base font-bold">verified</span>
+                <span>{isScanComplete ? `✓ Save & View Verified Photos (${confirmedCount})` : `Finish Verification (${confirmedCount} Confirmed)`}</span>
+                <span className="material-symbols-outlined text-sm">arrow_forward</span>
+              </button>
             </div>
           </div>
         )}

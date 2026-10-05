@@ -151,6 +151,36 @@ export default function ResultsGrid({ sessionId, referencePreview, onReset }: Pr
         candidate_count: remaining.length,
       };
     });
+    setConfirmedMatches((prev) => {
+      const next = { ...prev, [filename]: false };
+      try {
+        localStorage.setItem(`facefinder_confirmed_${sessionId}`, JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+  };
+
+  const handleDismissMatch = (filename: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setResults((prev) => {
+      if (!prev) return prev;
+      const updatedMatched = (prev.matched_images || []).filter((m) => m.filename !== filename);
+      const updatedCandidates = (prev.candidate_images || []).filter((c) => c.filename !== filename);
+      return {
+        ...prev,
+        matched_images: updatedMatched,
+        candidate_images: updatedCandidates,
+        matched_count: updatedMatched.length,
+        candidate_count: updatedCandidates.length,
+      };
+    });
+    setConfirmedMatches((prev) => {
+      const next = { ...prev, [filename]: false };
+      try {
+        localStorage.setItem(`facefinder_confirmed_${sessionId}`, JSON.stringify(next));
+      } catch {}
+      return next;
+    });
   };
 
   const handleDownloadAll = () => {
@@ -485,17 +515,28 @@ export default function ResultsGrid({ sessionId, referencePreview, onReset }: Pr
                       </button>
                     </div>
                   ) : (
-                    <div className="flex items-center justify-between pt-1 text-xs font-mono text-tertiary">
-                      <span className="flex items-center gap-1 font-bold">
+                    <div className="flex items-center justify-between pt-1 text-xs font-mono">
+                      <span className="flex items-center gap-1 font-bold text-tertiary">
                         <span className="material-symbols-outlined text-sm">verified_user</span>
-                        <span>Included in Download</span>
+                        <span>Verified</span>
                       </span>
-                      <button
-                        onClick={() => handleDownloadSingle(match)}
-                        className="text-secondary hover:text-white underline cursor-pointer"
-                      >
-                        Save Photo
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={(e) => handleDismissMatch(match.filename, e)}
+                          className="px-2 py-1 rounded bg-error/15 hover:bg-error/30 text-error border border-error/30 text-[11px] font-semibold transition-colors cursor-pointer"
+                          title="Remove from verified photos (Dismiss)"
+                        >
+                          ✕ Not Me
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDownloadSingle(match)}
+                          className="text-secondary hover:text-white underline cursor-pointer text-[11px]"
+                        >
+                          Save
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -507,10 +548,24 @@ export default function ResultsGrid({ sessionId, referencePreview, onReset }: Pr
 
       {/* Side-by-Side Verification Modal */}
       {selectedMatch && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
-          <div className="relative w-full max-w-3xl glass-panel rounded-2xl p-6 border border-primary/40 space-y-6 shadow-2xl overflow-hidden bg-surface-container-high/95">
+        <div
+          onClick={() => setSelectedMatch(null)}
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md cursor-pointer"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="relative w-full max-w-3xl glass-panel rounded-2xl p-6 border border-primary/40 space-y-6 shadow-2xl overflow-hidden bg-surface-container-high/95 cursor-default"
+          >
             <div className="flex items-center justify-between border-b border-white/10 pb-4">
               <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setSelectedMatch(null)}
+                  className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white font-mono text-xs flex items-center gap-1.5 transition-colors cursor-pointer border border-white/20"
+                >
+                  <span className="material-symbols-outlined text-[16px]">arrow_back</span>
+                  <span>Back to Grid</span>
+                </button>
                 <div className="w-8 h-8 rounded-lg bg-primary/20 border border-primary/40 flex items-center justify-center text-primary">
                   <span className="material-symbols-outlined text-[18px]">compare</span>
                 </div>
@@ -520,8 +575,10 @@ export default function ResultsGrid({ sessionId, referencePreview, onReset }: Pr
                 </div>
               </div>
               <button
+                type="button"
                 onClick={() => setSelectedMatch(null)}
                 className="p-1.5 rounded-lg bg-surface border border-white/10 hover:bg-white/10 text-on-surface-variant hover:text-white transition-colors cursor-pointer"
+                title="Back to Grid (Close)"
               >
                 <span className="material-symbols-outlined text-[20px]">close</span>
               </button>
@@ -559,30 +616,48 @@ export default function ResultsGrid({ sessionId, referencePreview, onReset }: Pr
                 <div>
                   <span className="font-mono text-[10px] text-outline uppercase block">Match Confidence</span>
                   <span className="font-mono text-base font-bold text-tertiary neon-text-tertiary">
-                    {selectedMatch.confidence_percent ?? Math.round((1 - selectedMatch.similarity_score) * 100)}%
+                    {selectedMatch.confidence_percent ?? Math.round(selectedMatch.similarity_score * 100)}%
                   </span>
                 </div>
               </div>
 
-              <div className="flex items-center gap-3">
-                {selectedMatch.match_tier === "candidate" && (
-                  <button
-                    onClick={() => {
-                      handleConfirmCandidate(selectedMatch);
-                      setSelectedMatch(null);
-                    }}
-                    className="px-4 py-2 rounded-lg bg-secondary text-surface font-mono text-xs font-bold hover:bg-white transition-all flex items-center gap-1.5 cursor-pointer"
-                  >
-                    <span className="material-symbols-outlined text-[15px]">thumb_up</span>
-                    <span>Confirm as Me</span>
-                  </button>
-                )}
+              <div className="flex items-center flex-wrap gap-2">
                 <button
+                  type="button"
+                  onClick={() => {
+                    handleConfirmCandidate(selectedMatch);
+                    setSelectedMatch(null);
+                  }}
+                  className="px-3.5 py-2 rounded-lg bg-tertiary text-on-tertiary font-mono text-xs font-bold hover:brightness-110 active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer shadow-md"
+                >
+                  <span className="material-symbols-outlined text-[16px]">check_circle</span>
+                  <span>✓ Yes, That's Me</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleDismissMatch(selectedMatch.filename);
+                    setSelectedMatch(null);
+                  }}
+                  className="px-3.5 py-2 rounded-lg bg-error/20 border border-error/40 text-error font-mono text-xs font-bold hover:bg-error hover:text-white active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer"
+                >
+                  <span className="material-symbols-outlined text-[16px]">cancel</span>
+                  <span>✕ No, Not Me</span>
+                </button>
+                <button
+                  type="button"
                   onClick={() => handleDownloadSingle(selectedMatch)}
-                  className="gradient-button text-white px-5 py-2.5 rounded-lg font-mono text-xs font-bold shadow-lg shadow-primary/20 hover:shadow-primary/40 active:scale-95 transition-all flex items-center gap-2 cursor-pointer"
+                  className="gradient-button text-white px-4 py-2 rounded-lg font-mono text-xs font-bold shadow-lg shadow-primary/20 hover:shadow-primary/40 active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer"
                 >
                   <span className="material-symbols-outlined text-[16px]">download</span>
-                  <span>Download Photo</span>
+                  <span>Download</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedMatch(null)}
+                  className="px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white font-mono text-xs transition-colors cursor-pointer"
+                >
+                  <span>Close</span>
                 </button>
               </div>
             </div>

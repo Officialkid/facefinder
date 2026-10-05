@@ -303,25 +303,42 @@ def extract_embedding(
             if faces and 0 <= target_face_index < len(faces):
                 target = faces[target_face_index]
                 box = target["bounding_box"]
-                img = cv2.imread(image_path)
+                # Must use preprocess_image so dimensions and EXIF orientation match bounding_box exactly
+                img = preprocess_image(image_path)
+                if img is None:
+                    img = cv2.imread(image_path)
                 if img is not None:
                     h_img, w_img = img.shape[:2]
-                    pad_x = int(box["w"] * 0.25)
-                    pad_y = int(box["h"] * 0.25)
+                    pad_x = int(box["w"] * 0.20)
+                    pad_y = int(box["h"] * 0.20)
                     x1 = max(0, box["x"] - pad_x)
                     y1 = max(0, box["y"] - pad_y)
                     x2 = min(w_img, box["x"] + box["w"] + pad_x)
                     y2 = min(h_img, box["y"] + box["h"] + pad_y)
                     face_crop = img[y1:y2, x1:x2]
                     if face_crop.size > 0:
-                        reps = DeepFace.represent(
-                            img_path=face_crop,
-                            model_name=model_name,
-                            enforce_detection=False,
-                        )
+                        reps = None
+                        for det in ["ssd", "opencv"]:
+                            try:
+                                reps = DeepFace.represent(
+                                    img_path=face_crop,
+                                    model_name=model_name,
+                                    enforce_detection=True,
+                                    detector_backend=det,
+                                )
+                                if reps:
+                                    break
+                            except Exception:
+                                continue
+                        if not reps:
+                            reps = DeepFace.represent(
+                                img_path=face_crop,
+                                model_name=model_name,
+                                enforce_detection=False,
+                            )
                         if reps:
                             logger.info(
-                                "Extracted embedding for targeted face %d (%s-D)",
+                                "Extracted aligned embedding for targeted face %d (%s-D)",
                                 target_face_index,
                                 len(reps[0]["embedding"]),
                             )
@@ -414,8 +431,8 @@ def match_face_in_image(
     dataset_image_path: str,
     reference_embedding: np.ndarray,
     model_name: str = "ArcFace",
-    distance_threshold: float = 0.45,
-    candidate_threshold: float = 0.65,
+    distance_threshold: float = 0.40,
+    candidate_threshold: float = 0.55,
 ) -> Tuple[bool, bool, float, float, int, dict]:
     """
     Try to match the reference face in a dataset image.
@@ -556,7 +573,7 @@ def scan_dataset(
     images_with_multiple_faces = 0
     blurry_matches = 0
     total_paths = len(dataset_paths)
-    candidate_threshold = max(distance_threshold + 0.20, 0.65)
+    candidate_threshold = max(distance_threshold + 0.12, 0.55)
     lock = threading.Lock()
     scanned_count = 0
     start_scan_time = time.time()
