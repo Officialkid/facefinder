@@ -189,7 +189,16 @@ async def upload_dataset_zip(
             raise HTTPException(status_code=400, detail="The ZIP archive contains no supported image files (JPG, PNG, WEBP, BMP).")
 
         _cleanup_path(dataset_dir)
-        staging_dir.replace(dataset_dir)
+        try:
+            staging_dir.replace(dataset_dir)
+        except OSError:
+            import shutil
+            dataset_dir.mkdir(parents=True, exist_ok=True)
+            for item in staging_dir.iterdir():
+                target = dataset_dir / item.name
+                _cleanup_path(target)
+                shutil.move(str(item), str(target))
+            _cleanup_path(staging_dir)
 
         # Update session
         session.dataset_source = f"local_zip://{file.filename}"

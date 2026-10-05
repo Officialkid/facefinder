@@ -47,7 +47,8 @@ export default function DatasetForm({ sessionId, referencePreview, selectedFaceI
       setZipReadyCount(res.image_count);
       setDatasetUrl(`local_zip://${file.name}`);
     } catch (err: any) {
-      const msg = err?.response?.data?.detail ?? "Failed to upload and extract ZIP file. Please try again.";
+      console.error("ZIP upload error:", err);
+      const msg = err?.response?.data?.detail || err?.message || "Failed to upload and extract ZIP file. Please try again.";
       setError(msg);
       setZipFile(null);
       setZipReadyCount(null);

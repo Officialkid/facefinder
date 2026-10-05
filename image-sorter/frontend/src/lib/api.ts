@@ -4,9 +4,34 @@
 
 import axios from "axios";
 
+export function getBackendBaseUrl(): string {
+  if (typeof window !== "undefined") {
+    if (process.env.NEXT_PUBLIC_API_URL) {
+      return process.env.NEXT_PUBLIC_API_URL.replace(/\/$/, "");
+    }
+    const isLocal =
+      window.location.hostname === "localhost" ||
+      window.location.hostname === "127.0.0.1" ||
+      window.location.hostname === "0.0.0.0";
+    if (isLocal) {
+      return "http://127.0.0.1:8000";
+    }
+    return "https://facefinder-backend-218725985655.us-central1.run.app";
+  }
+  return "";
+}
+
 const api = axios.create({
-  baseURL: "/api",
-  timeout: 120000,
+  timeout: 300000,
+});
+
+api.interceptors.request.use((config) => {
+  const base = getBackendBaseUrl();
+  if (config.url && !config.url.startsWith("http")) {
+    const cleanUrl = config.url.startsWith("/") ? config.url : `/${config.url}`;
+    config.url = `${base}/api${cleanUrl}`;
+  }
+  return config;
 });
 
 export const RECOGNITION_MODELS = ["ArcFace", "Facenet", "VGG-Face", "DeepFace"] as const;
@@ -354,16 +379,16 @@ export const ImageSorterAPI = {
   },
 
   getDownloadUrl: (session_id: string, relativePath: string): string =>
-    `/api/results/${session_id}/download/${encodeURIComponent(relativePath)}`,
+    `${getBackendBaseUrl()}/api/results/${session_id}/download/${encodeURIComponent(relativePath)}`,
 
   getDownloadAllUrl: (session_id: string): string =>
-    `/api/results/${session_id}/download-all`,
+    `${getBackendBaseUrl()}/api/results/${session_id}/download-all`,
 
   getImageUrl: (session_id: string, relativePath: string): string =>
-    `/api/results/${session_id}/download/${encodeURIComponent(relativePath)}`,
+    `${getBackendBaseUrl()}/api/results/${session_id}/download/${encodeURIComponent(relativePath)}`,
 
   getReferenceImageUrl: (session_id: string): string =>
-    `/api/upload/${session_id}/reference`,
+    `${getBackendBaseUrl()}/api/upload/${session_id}/reference`,
 
   deleteSession: async (session_id: string): Promise<void> => {
     await api.delete(`/results/${session_id}`);
