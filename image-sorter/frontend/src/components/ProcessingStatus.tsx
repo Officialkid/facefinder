@@ -10,14 +10,10 @@ interface Props {
 }
 
 const CHECKPOINTS = [
-  { id: 1, title: "1. Image Normalization", desc: "Resolution & lighting fixed." },
-  { id: 2, title: "2. Face Detection", desc: "MTCNN localized faces." },
-  { id: 3, title: "3. Landmark Alignment", desc: "68-point spatial mapping." },
-  { id: 4, title: "4. Quality Filtering", desc: "Blur & occlusion rejected." },
-  { id: 5, title: "5. Feature Extraction", desc: "Deep topology mapping." },
-  { id: 6, title: "6. Vector Embedding", desc: "Generating 512-D tensors..." },
-  { id: 7, title: "7. Cosine Distance Matching", desc: "Comparing angular distance." },
-  { id: 8, title: "8. Result Clustering", desc: "Aggregating candidate matches." },
+  { id: 1, title: "1. Portrait Verified", desc: "Your reference face is ready." },
+  { id: 2, title: "2. Gallery Loaded", desc: "Event photos prepared." },
+  { id: 3, title: "3. Finding Your Photos", desc: "Matching across the album." },
+  { id: 4, title: "4. Ready to Save", desc: "Review and download." },
 ];
 
 export default function ProcessingStatus({ sessionId, onComplete, onFailed }: Props) {
@@ -112,7 +108,7 @@ export default function ProcessingStatus({ sessionId, onComplete, onFailed }: Pr
   const progress = status ? Math.min(100, Math.max(10, Math.round(status.progress_percent))) : 15;
   const currentStageIndex = (() => {
     if (!status) return 1;
-    if (isScanComplete || status.status === "completed" || status.stage === "results_ready") return 9;
+    if (isScanComplete || status.status === "completed" || status.stage === "results_ready") return 5;
 
     switch (status.stage) {
       case "queued":
@@ -120,20 +116,13 @@ export default function ProcessingStatus({ sessionId, onComplete, onFailed }: Pr
       case "dataset_validation":
         return 1;
       case "dataset_download":
-        return 2;
       case "dataset_extraction":
-        return 3;
+        return 2;
       case "reference_analysis":
-        return status.progress_percent >= 34 ? 5 : 4;
       case "dataset_scan":
-        if (status.progress_percent >= 85) return 8;
-        if (status.progress_percent >= 65) return 7;
-        return 6;
+        return 3;
       default:
-        return Math.min(
-          CHECKPOINTS.length,
-          Math.max(1, Math.round((progress / 100) * CHECKPOINTS.length))
-        );
+        return Math.min(CHECKPOINTS.length, Math.max(1, Math.ceil((progress / 100) * CHECKPOINTS.length)));
     }
   })();
 
@@ -298,16 +287,16 @@ export default function ProcessingStatus({ sessionId, onComplete, onFailed }: Pr
             </div>
           )}
 
-          <h2 className="font-display text-3xl sm:text-4xl font-bold text-white text-center mb-2 tracking-tight">
-            {isScanComplete ? "Neural Scan Complete" : "Deep Neural Scan"}
+          <h2 className="font-display text-3xl sm:text-4xl font-normal text-white text-center mb-2 tracking-tight">
+            {isScanComplete ? "Your Photos Are Ready" : "Finding Your Photos"}
           </h2>
           <p className="font-sans text-xs sm:text-sm text-on-surface-variant text-center mb-6 max-w-md">
             {isScanComplete
-              ? "All photos analyzed. Review your matched photos below and tap Confirm to finalize your gallery."
-              : "Comparing 512-D embeddings across event photos in memory."}
+              ? "All event photos have been checked. Review your matches below and tap Confirm to save."
+              : "Scanning your event gallery to collect every photo you appear in."}
           </p>
 
-          {/* Central Animated HUD Biometric Radar Reticle */}
+          {/* Central Animated Radar Reticle */}
           <div className="relative w-40 h-40 sm:w-48 sm:h-48 flex items-center justify-center my-3">
             {/* Outer radar circle */}
             <div className={`absolute inset-0 rounded-full border hud-radar-circle ${isScanComplete ? "border-tertiary/40" : "border-secondary/30"}`} />
@@ -328,7 +317,7 @@ export default function ProcessingStatus({ sessionId, onComplete, onFailed }: Pr
               <div
                 className="absolute inset-0 rounded-full animate-spin pointer-events-none opacity-40 conic-radar"
                 style={{
-                  background: "conic-gradient(from 0deg, rgba(76, 215, 246, 0.4) 0deg, transparent 90deg)",
+                  background: "conic-gradient(from 0deg, rgba(200, 245, 90, 0.35) 0deg, transparent 90deg)",
                   animationDuration: "3s",
                 }}
               />
@@ -402,9 +391,9 @@ export default function ProcessingStatus({ sessionId, onComplete, onFailed }: Pr
           </div>
 
           <div className="glass-panel rounded-xl p-4">
-            <span className="font-mono text-[10px] uppercase text-on-surface-variant block">Active Model</span>
-            <p className="font-mono text-xs font-bold text-primary truncate mt-2">
-              ArcFace (Multi-Core)
+            <span className="text-[10px] uppercase tracking-wider text-on-surface-variant block">Progress</span>
+            <p className="text-2xl font-bold text-secondary mt-1">
+              {isScanComplete ? "100%" : `${progress}%`}
             </p>
           </div>
 
@@ -424,7 +413,7 @@ export default function ProcessingStatus({ sessionId, onComplete, onFailed }: Pr
         </div>
 
 
-        {/* Academic Benchmark & Efficiency Banner */}
+        {/* Time Saved Summary Banner */}
         <div className="glass-panel rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border border-tertiary/20 bg-tertiary/5">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-lg bg-tertiary/20 border border-tertiary/40 flex items-center justify-center flex-shrink-0">
@@ -432,63 +421,19 @@ export default function ProcessingStatus({ sessionId, onComplete, onFailed }: Pr
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <span className="font-mono text-xs font-bold text-white">Automated Retrieval vs Manual Search</span>
+                <span className="text-xs font-semibold text-white">Time Saved vs. Manual Browsing</span>
                 {timeSaved !== null && timeSaved > 0 && (
-                  <span className="px-2 py-0.5 rounded-full bg-tertiary/20 text-tertiary text-[10px] font-mono font-bold">
-                    {timeSaved}% Time Saved
+                  <span className="px-2 py-0.5 rounded-full bg-tertiary/20 text-tertiary text-[10px] font-bold">
+                    {timeSaved}% Faster
                   </span>
                 )}
               </div>
-              <p className="text-[11px] text-on-surface-variant mt-0.5">
-                Manual scrolling baseline: ~{manualEstSecs ? formatTime(manualEstSecs) : "--"} vs AI retrieval: {formatTime(displayElapsed)}
-                {evaluatedCount > 0 && ` | Precision: ${precisionPct}% | Est. F1-Score: ${f1ScorePct}%`}
+              <p className="text-xs text-on-surface-variant mt-0.5">
+                Manual scrolling: ~{manualEstSecs ? formatTime(manualEstSecs) : "--"} vs FaceFinder: {formatTime(displayElapsed)}
               </p>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={() => setShowResearchInsights((prev) => !prev)}
-            className="text-xs font-mono text-secondary hover:text-white transition-colors flex items-center gap-1 flex-shrink-0"
-          >
-            <span className="material-symbols-outlined text-[16px]">school</span>
-            <span>{showResearchInsights ? "Hide Research Insights" : "Research Insights"}</span>
-          </button>
         </div>
-
-        {/* Expandable Research & Academic Insights Panel */}
-        {showResearchInsights && (
-          <div className="glass-panel rounded-xl p-5 border border-primary/30 bg-surface-container/60 animate-in fade-in slide-in-from-top-2 duration-300">
-            <div className="flex items-center justify-between mb-3 border-b border-white/10 pb-2">
-              <h4 className="font-display text-sm font-bold text-white flex items-center gap-2">
-                <span className="material-symbols-outlined text-primary text-[18px]">science</span>
-                <span>Academic Research Principles (Gateri et al., JKUAT Study)</span>
-              </h4>
-              <span className="font-mono text-[10px] text-primary bg-primary/10 border border-primary/30 px-2 py-0.5 rounded-full">
-                Evaluation Mode
-              </span>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
-              <div className="p-3 rounded-lg bg-black/30 border border-white/10">
-                <span className="font-mono text-[10px] text-tertiary block font-bold">1. FEATURE EXTRACTION</span>
-                <p className="text-on-surface-variant text-[11px] mt-1 leading-relaxed">
-                  512-D deep vector representation via ArcFace. Landmark alignment guarantees orientation robustness without heavy brute-force image rotation.
-                </p>
-              </div>
-              <div className="p-3 rounded-lg bg-black/30 border border-white/10">
-                <span className="font-mono text-[10px] text-secondary block font-bold">2. COLOR-SPACE / ILLUMINATION</span>
-                <p className="text-on-surface-variant text-[11px] mt-1 leading-relaxed">
-                  Decouples luminance from chrominance (HSV/LAB). Normalizes lighting on underexposed event photos while preserving facial identity.
-                </p>
-              </div>
-              <div className="p-3 rounded-lg bg-black/30 border border-white/10">
-                <span className="font-mono text-[10px] text-primary block font-bold">3. INFORMATION RETRIEVAL METRICS</span>
-                <p className="text-on-surface-variant text-[11px] mt-1 leading-relaxed">
-                  Cosine Angular Distance: d = max(0, 1 - sim). Evaluated: {evaluatedCount} (Verified TP: {truePositives}, Dismissed FP: {falsePositives}).
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* Live Discovered Candidates: "Is this you?" Verification Stream */}
         {liveMatches.length > 0 && (
@@ -770,9 +715,9 @@ export default function ProcessingStatus({ sessionId, onComplete, onFailed }: Pr
 
         {/* Privacy First Info Banner */}
         <div className="glass-panel rounded-xl p-4 flex items-start gap-3 border border-secondary/20 bg-secondary/5">
-          <span className="material-symbols-outlined text-secondary text-[20px] flex-shrink-0 mt-0.5">info</span>
+          <span className="material-symbols-outlined text-secondary text-[20px] flex-shrink-0 mt-0.5">lock</span>
           <p className="text-xs text-on-surface-variant leading-relaxed">
-            <strong className="text-secondary font-semibold">Privacy First:</strong> Cosine angular distance ensures high precision matching while vectors remain ephemeral and privacy-compliant. No facial data is stored persistently.
+            <strong className="text-secondary font-semibold">Private by Design:</strong> Your photos are processed temporarily for this session and automatically deleted — nothing is stored or shared.
           </p>
         </div>
       </div>

@@ -200,7 +200,7 @@ export default function ResultsGrid({ sessionId, referencePreview, onReset }: Pr
     return (
       <div className="py-24 flex flex-col items-center justify-center space-y-4">
         <div className="w-12 h-12 rounded-full border-2 border-primary border-t-transparent animate-spin" />
-        <p className="font-mono text-sm text-secondary animate-pulse">Aggregating matched biometric vectors...</p>
+        <p className="text-sm text-secondary animate-pulse">Loading your matched photos...</p>
       </div>
     );
   }
@@ -473,8 +473,8 @@ export default function ResultsGrid({ sessionId, referencePreview, onReset }: Pr
                     <p className="font-mono text-xs font-bold text-white truncate" title={match.filename}>
                       {match.filename}
                     </p>
-                    <div className="flex items-center justify-between mt-1 text-[11px] font-mono text-outline">
-                      <span>Cos Dist: {cosDist.toFixed(3)}</span>
+                    <div className="flex items-center justify-between mt-1 text-[11px] text-outline">
+                      <span>{matchPercent}% Match</span>
                       <span>{match.source_group || "Event Photo"}</span>
                     </div>
                   </div>
@@ -612,15 +612,9 @@ export default function ResultsGrid({ sessionId, referencePreview, onReset }: Pr
             <div className="p-4 rounded-xl bg-surface-container/60 border border-white/10 flex flex-col sm:flex-row items-center justify-between gap-4">
               <div className="flex items-center gap-6">
                 <div>
-                  <span className="font-mono text-[10px] text-outline uppercase block">Cosine Distance</span>
-                  <span className="font-mono text-base font-bold text-secondary">
-                    {selectedMatch.distance !== undefined ? selectedMatch.distance.toFixed(4) : (1 - selectedMatch.similarity_score).toFixed(4)}
-                  </span>
-                </div>
-                <div>
-                  <span className="font-mono text-[10px] text-outline uppercase block">Match Confidence</span>
-                  <span className="font-mono text-base font-bold text-tertiary neon-text-tertiary">
-                    {selectedMatch.confidence_percent ?? Math.round(selectedMatch.similarity_score * 100)}%
+                  <span className="text-[10px] text-outline uppercase tracking-wide block">Match Score</span>
+                  <span className="text-lg font-bold text-tertiary">
+                    {selectedMatch.confidence_percent ?? Math.round(selectedMatch.similarity_score * 100)}% Match
                   </span>
                 </div>
               </div>

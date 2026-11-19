@@ -72,14 +72,19 @@ export default function Home() {
       <nav className="fixed top-0 w-full z-50 bg-surface/80 backdrop-blur-xl border-b border-white/10 shadow-sm transition-all duration-300">
         <div className="flex justify-between items-center px-6 sm:px-8 py-4 max-w-7xl mx-auto">
           {/* Brand */}
-          <div className="flex items-center gap-4 cursor-pointer" onClick={handleReset}>
-            <img alt="FaceFinder AI Logo" className="h-8 w-8 rounded-full object-cover shadow-sm" src="/logo.png" />
-            <span className="text-xl md:text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-[#8b5cf6] to-[#06b6d4]">
-              FaceFinder AI
-            </span>
-            <div className="hidden lg:flex items-center gap-2 ml-4 px-3 py-1 rounded-full border border-tertiary-fixed-dim/30 bg-tertiary-fixed-dim/10">
-              <div className="w-2 h-2 rounded-full bg-tertiary-fixed-dim animate-pulse" />
-              <span className="font-mono text-xs text-tertiary-fixed-dim">Engine Live</span>
+          <div className="flex items-center gap-3.5 cursor-pointer" onClick={handleReset}>
+            <img alt="FaceFinder Logo" className="h-8 w-8 rounded-full object-cover shadow-sm ring-1 ring-white/10" src="/logo.png" />
+            <div className="flex items-baseline gap-2">
+              <span className="font-display text-2xl md:text-3xl tracking-tight text-white">
+                FaceFinder
+              </span>
+              <span className="hidden sm:inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold tracking-wide bg-secondary/15 text-secondary border border-secondary/30">
+                EventSlot
+              </span>
+            </div>
+            <div className="hidden lg:flex items-center gap-2 ml-2 px-3 py-1 rounded-full border border-tertiary/30 bg-tertiary/10">
+              <div className="w-2 h-2 rounded-full bg-tertiary animate-pulse" />
+              <span className="text-xs font-medium text-tertiary">Live</span>
             </div>
           </div>
 

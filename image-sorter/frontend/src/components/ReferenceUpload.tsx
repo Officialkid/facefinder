@@ -91,32 +91,32 @@ export default function ReferenceUpload({ onSuccess }: Props) {
   return (
     <div className="w-full flex flex-col items-center">
       {/* Hero Section */}
-      <div className="text-center max-w-3xl mb-12 mt-4">
-        <h1 className="text-4xl md:text-5xl font-bold text-white mb-6 leading-tight">
+      <div className="text-center max-w-3xl mb-10 mt-4">
+        <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full text-xs font-medium bg-secondary/10 border border-secondary/30 text-secondary mb-5">
+          <span className="w-1.5 h-1.5 rounded-full bg-secondary" />
+          <span>EventSlot Photo Discovery</span>
+        </div>
+        <h1 className="font-display text-4xl sm:text-5xl md:text-6xl font-normal text-white mb-5 leading-[1.08] tracking-tight">
           Find yourself across <br />
-          <span className="gradient-text">thousands of event photos</span>
+          <span className="gradient-text italic">thousands of event photos</span>
         </h1>
-        <p className="text-base text-on-surface-variant mb-8 max-w-2xl mx-auto">
-          Leveraging state-of-the-art facial recognition models to instantly locate your presence in massive unstructured image datasets.
+        <p className="text-sm sm:text-base text-on-surface-variant mb-7 max-w-xl mx-auto leading-relaxed">
+          Upload one clear photo of yourself, paste your event gallery link, and instantly collect every picture you appear in.
         </p>
 
-        {/* Feature Badges */}
-        <div className="flex flex-wrap justify-center gap-3">
+        {/* Clean EventSlot Feature Pills */}
+        <div className="flex flex-wrap justify-center gap-2.5">
           <div className="glass-panel px-4 py-2 rounded-full flex items-center gap-2">
-            <span className="material-symbols-outlined text-secondary text-sm">memory</span>
-            <span className="font-mono text-xs text-on-surface-variant">512-D Embeddings</span>
+            <span className="material-symbols-outlined text-secondary text-sm">auto_awesome</span>
+            <span className="text-xs font-medium text-on-surface-variant">Instant Face Match</span>
           </div>
           <div className="glass-panel px-4 py-2 rounded-full flex items-center gap-2">
-            <span className="material-symbols-outlined text-primary text-sm">cloud_download</span>
-            <span className="font-mono text-xs text-on-surface-variant">Multi-Source Ingestion</span>
+            <span className="material-symbols-outlined text-primary text-sm">photo_library</span>
+            <span className="text-xs font-medium text-on-surface-variant">Pixieset &amp; ZIP Ready</span>
           </div>
           <div className="glass-panel px-4 py-2 rounded-full flex items-center gap-2">
-            <span className="material-symbols-outlined text-secondary text-sm">join_inner</span>
-            <span className="font-mono text-xs text-on-surface-variant">Cosine Similarity Matching</span>
-          </div>
-          <div className="glass-panel px-4 py-2 rounded-full flex items-center gap-2 border-tertiary-fixed-dim/30">
-            <span className="material-symbols-outlined text-tertiary-fixed-dim text-sm">security</span>
-            <span className="font-mono text-xs text-tertiary-fixed-dim">Zero-Retention Privacy</span>
+            <span className="material-symbols-outlined text-tertiary text-sm">lock</span>
+            <span className="text-xs font-medium text-tertiary">Private · Auto-Deleted</span>
           </div>
         </div>
       </div>
