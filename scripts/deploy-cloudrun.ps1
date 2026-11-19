@@ -1,5 +1,5 @@
 param(
-    [string]$ServiceName = "facefinder-backend",
+    [string]$ServiceName = "facefinder-api",
     [string]$Region = "us-central1"
 )
 

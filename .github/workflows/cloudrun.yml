@@ -15,9 +15,9 @@ jobs:
     env:
       PROJECT_ID: ${{ secrets.GCP_PROJECT_ID || 'facefinder-ai' }}
       REGION: ${{ secrets.GCP_REGION || 'us-central1' }}
-      SERVICE_NAME: ${{ secrets.CLOUD_RUN_SERVICE || 'facefinder-backend' }}
+      SERVICE_NAME: ${{ secrets.CLOUD_RUN_SERVICE || 'facefinder-api' }}
       REPOSITORY: ${{ secrets.GAR_REPOSITORY || 'facefinder' }}
-      IMAGE_NAME: facefinder-backend
+      IMAGE_NAME: facefinder-api
       GCP_CREDENTIALS_JSON: ${{ secrets.GCP_CREDENTIALS_JSON || secrets.GCP_SA_KEY }}
 
     steps:

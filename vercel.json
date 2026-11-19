@@ -2,7 +2,7 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://facefinder-backend-218725985655.us-central1.run.app/api/:path*"
+      "destination": "https://facefinder-api-218725985655.us-central1.run.app/api/:path*"
     }
   ]
 }

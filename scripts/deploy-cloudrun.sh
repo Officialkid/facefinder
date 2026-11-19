@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -e
 
-SERVICE_NAME="${1:-facefinder-backend}"
+SERVICE_NAME="${1:-facefinder-api}"
 REGION="${2:-us-central1}"
 
 echo "=========================================="

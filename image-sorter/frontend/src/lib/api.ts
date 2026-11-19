@@ -16,7 +16,7 @@ export function getBackendBaseUrl(): string {
     if (isLocal) {
       return "http://127.0.0.1:8000";
     }
-    return "https://facefinder-backend-218725985655.us-central1.run.app";
+    return "https://facefinder-api-218725985655.us-central1.run.app";
   }
   return "";
 }
