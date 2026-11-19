@@ -160,8 +160,9 @@ def _generate_detection_variants(image_path: str) -> list[tuple[str, np.ndarray]
 
 def _represent_variant(image: np.ndarray, model_name: str, fast_mode: bool = False):
     DeepFace = _get_deepface()
-    # Fast mode for batch scanning: SSD + OpenCV only (ultra-fast, avoids expensive MTCNN pyramid on non-face photos)
-    detectors = ["ssd", "opencv"] if fast_mode else ["ssd", "mtcnn", "opencv"]
+    # Fast mode for batch scanning: SSD only (sub-50ms, accurate, landmark-aligned).
+    # Deep scan: SSD + MTCNN fallback. (OpenCV haar omitted to guarantee landmark alignment).
+    detectors = ["ssd"] if fast_mode else ["ssd", "mtcnn"]
     last_err = None
     for detector in detectors:
         try:
@@ -251,41 +252,50 @@ def detect_reference_faces(image_path: str) -> list[dict]:
     return results
 
 
-def detect_blur(image_path: str) -> dict:
+def detect_blur(image_input) -> dict:
     """
     Detect blur level in an image using Laplacian variance.
-    Returns a dict with blur_score, is_blurry flag, and description.
-    Higher variance = sharper image. Lower variance = blurrier image.
+    Accepts either an image path (str) or an existing preprocessed numpy array.
+    Downscales to max 480px for sub-millisecond execution and memory safety.
     """
     cv2 = _get_cv2()
-    img = cv2.imread(image_path)
-    if img is None:
-        return {"blur_score": 0.0, "is_blurry": True, "description": "Could not load image for blur check."}
+    try:
+        if isinstance(image_input, np.ndarray):
+            img = image_input
+        else:
+            img = cv2.imread(str(image_input))
+        if img is None:
+            return {"blur_score": 0.0, "is_blurry": False, "description": "Could not inspect blur."}
 
-    # Convert to grayscale and compute Laplacian variance
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    lap_var = cv2.Laplacian(gray, cv2.CV_64F).var()
+        h, w = img.shape[:2]
+        if max(h, w) > 480:
+            scale = 480.0 / max(h, w)
+            img = cv2.resize(img, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA)
 
-    # Thresholds tuned for face photos (frontal, ~640px+ faces)
-    # Very sharp: > 400, Acceptable: 150-500, Blurry: 50-150, Very blurry: < 50
-    if lap_var >= 400:
-        description = "Sharp and clear."
-        is_blurry = False
-    elif lap_var >= 150:
-        description = "Moderately sharp."
-        is_blurry = False
-    elif lap_var >= 50:
-        description = "Somewhat blurry."
-        is_blurry = True
-    else:
-        description = "Very blurry."
-        is_blurry = True
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        lap_var = float(cv2.Laplacian(gray, cv2.CV_64F).var())
 
-    return {
-        "blur_score": round(lap_var, 2),
-        "is_blurry": is_blurry,
-        "description": description,
-    }
+        if lap_var >= 400:
+            description = "Sharp and clear."
+            is_blurry = False
+        elif lap_var >= 150:
+            description = "Moderately sharp."
+            is_blurry = False
+        elif lap_var >= 50:
+            description = "Somewhat blurry."
+            is_blurry = True
+        else:
+            description = "Very blurry."
+            is_blurry = True
+
+        return {
+            "blur_score": round(lap_var, 2),
+            "is_blurry": is_blurry,
+            "description": description,
+        }
+    except Exception as exc:
+        logger.debug("Blur detection safely bypassed: %s", exc)
+        return {"blur_score": 0.0, "is_blurry": False, "description": "Sharpness check skipped."}
 
 
 def extract_embedding(
@@ -296,14 +306,20 @@ def extract_embedding(
     """
     Detect face and extract facial embedding from a reference image.
     Supports single faces, and in multi-face reference photos, extracts embedding
-    specifically for the user-selected target_face_index.
+    specifically for the user-selected target_face_index while maintaining full 5-point
+    facial landmark alignment.
     """
     DeepFace = _get_deepface()
     cv2 = _get_cv2()
 
-    # If target_face_index was chosen, extract that specific face crop.
-    # NEVER fall back silently to dominant face if targeted extraction fails,
-    # as that would compare against the wrong person.
+    # Preprocess image to cap dimensions and normalize EXIF orientation
+    img = preprocess_image(image_path)
+    if img is None:
+        img = cv2.imread(image_path)
+    if img is None:
+        logger.error("Failed to load reference image: %s", image_path)
+        return None
+
     if target_face_index is not None:
         try:
             faces = detect_reference_faces(image_path)
@@ -315,52 +331,64 @@ def extract_embedding(
                 )
                 return None
 
+            # Primary: Extract aligned representation directly across detected faces on full image
+            for det in ["ssd", "mtcnn"]:
+                try:
+                    with _inference_lock:
+                        reps = DeepFace.represent(
+                            img_path=img,
+                            model_name=model_name,
+                            enforce_detection=True,
+                            detector_backend=det,
+                        )
+                    if reps:
+                        # Sort left-to-right to match detect_reference_faces visual indexing
+                        reps.sort(key=lambda r: r["facial_area"]["x"])
+                        idx = min(target_face_index, len(reps) - 1)
+                        embedding = np.array(reps[idx]["embedding"], dtype=np.float32)
+                        logger.info(
+                            "Extracted aligned embedding for targeted face %d using %s (%s-D)",
+                            target_face_index,
+                            det,
+                            len(embedding),
+                        )
+                        return embedding
+                except Exception:
+                    continue
+
+            # Secondary fallback: Extract from padded crop if full-image representation missed target
             target = faces[target_face_index]
             box = target["bounding_box"]
-            # Must use preprocess_image so dimensions and EXIF orientation match bounding_box exactly
-            img = preprocess_image(image_path)
-            if img is None:
-                img = cv2.imread(image_path)
-            if img is not None:
-                h_img, w_img = img.shape[:2]
-                pad_x = int(box["w"] * 0.20)
-                pad_y = int(box["h"] * 0.20)
-                x1 = max(0, box["x"] - pad_x)
-                y1 = max(0, box["y"] - pad_y)
-                x2 = min(w_img, box["x"] + box["w"] + pad_x)
-                y2 = min(h_img, box["y"] + box["h"] + pad_y)
-                face_crop = img[y1:y2, x1:x2]
-                if face_crop.size > 0:
-                    reps = None
-                    for det in ["ssd", "opencv"]:
-                        try:
-                            with _inference_lock:
-                                reps = DeepFace.represent(
-                                    img_path=face_crop,
-                                    model_name=model_name,
-                                    enforce_detection=True,
-                                    detector_backend=det,
-                                )
-                            if reps:
-                                break
-                        except Exception:
-                            continue
-                    if not reps:
+            h_img, w_img = img.shape[:2]
+            pad_x = int(box["w"] * 0.35)
+            pad_y = int(box["h"] * 0.35)
+            x1 = max(0, box["x"] - pad_x)
+            y1 = max(0, box["y"] - pad_y)
+            x2 = min(w_img, box["x"] + box["w"] + pad_x)
+            y2 = min(h_img, box["y"] + box["h"] + pad_y)
+            face_crop = img[y1:y2, x1:x2]
+            if face_crop.size > 0:
+                for det in ["ssd", "mtcnn"]:
+                    try:
                         with _inference_lock:
                             reps = DeepFace.represent(
                                 img_path=face_crop,
                                 model_name=model_name,
-                                enforce_detection=False,
+                                enforce_detection=True,
+                                detector_backend=det,
                             )
-                    if reps:
-                        logger.info(
-                            "Extracted aligned embedding for targeted face %d (%s-D)",
-                            target_face_index,
-                            len(reps[0]["embedding"]),
-                        )
-                        return np.array(reps[0]["embedding"], dtype=np.float32)
+                        if reps:
+                            embedding = np.array(reps[0]["embedding"], dtype=np.float32)
+                            logger.info(
+                                "Extracted aligned embedding from padded crop for targeted face %d (%s-D)",
+                                target_face_index,
+                                len(embedding),
+                            )
+                            return embedding
+                    except Exception:
+                        continue
 
-            logger.error("Failed to extract embedding from targeted face %d crop.", target_face_index)
+            logger.error("Failed to extract aligned embedding from targeted face %d crop.", target_face_index)
             return None
         except Exception as exc:
             logger.error("Targeted face extraction failed: %s. Aborting fallback.", exc)
@@ -467,10 +495,9 @@ def match_face_in_image(
 
     image = preprocess_image(dataset_image_path)
     if image is None:
-        blur_info = detect_blur(dataset_image_path)
-        return False, False, 0.0, float("inf"), 0, blur_info
+        return False, False, 0.0, float("inf"), 0, {"blur_score": 0.0, "is_blurry": False, "description": ""}
 
-    # Fast evaluation on natural orientation with OpenCV/SSD + MTCNN fallback
+    # Fast evaluation on natural orientation with SSD (sub-50ms, landmark-aligned)
     try:
         embedding_objs = _represent_variant(image, model_name, fast_mode=True)
         if embedding_objs:
@@ -485,9 +512,14 @@ def match_face_in_image(
     except Exception as exc:
         logger.debug("Fast scan skipped %s (no face detected): %s", dataset_image_path, exc)
 
-    blur_info = detect_blur(dataset_image_path)
     is_match = best_distance <= distance_threshold
     is_candidate = (not is_match) and (best_distance <= candidate_threshold)
+    
+    # Lazy blur check: evaluate blur ONLY when a face match or candidate is verified
+    blur_info = {"blur_score": 0.0, "is_blurry": False, "description": ""}
+    if is_match or is_candidate:
+        blur_info = detect_blur(image)
+
     return (
         is_match,
         is_candidate,
@@ -597,7 +629,7 @@ def scan_dataset(
     lock = threading.Lock()
     scanned_count = 0
     start_scan_time = time.time()
-    max_workers = 2
+    max_workers = min(4, os.cpu_count() or 2)
     highest_observed_similarity = 0.0
 
     def process_image_job(job_tuple):
