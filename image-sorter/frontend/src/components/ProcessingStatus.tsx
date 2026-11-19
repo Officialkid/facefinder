@@ -52,15 +52,16 @@ export default function ProcessingStatus({ sessionId, onComplete, onFailed }: Pr
     });
   };
 
+  const [isScanComplete, setIsScanComplete] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
   useEffect(() => {
+    if (isScanComplete) return;
     const timer = setInterval(() => {
       setElapsed((prev) => prev + 1);
     }, 1000);
     return () => clearInterval(timer);
-  }, []);
-
-  const [isScanComplete, setIsScanComplete] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  }, [isScanComplete]);
 
   useEffect(() => {
     let intervalId: NodeJS.Timeout;
@@ -108,7 +109,7 @@ export default function ProcessingStatus({ sessionId, onComplete, onFailed }: Pr
   const progress = status ? Math.min(100, Math.max(10, Math.round(status.progress_percent))) : 15;
   const currentStageIndex = (() => {
     if (!status) return 1;
-    if (status.status === "completed" || status.stage === "results_ready") return 8;
+    if (isScanComplete || status.status === "completed" || status.stage === "results_ready") return 9;
 
     switch (status.stage) {
       case "queued":
@@ -134,14 +135,22 @@ export default function ProcessingStatus({ sessionId, onComplete, onFailed }: Pr
   })();
 
   const formatTime = (secs: number) => {
-    const m = Math.floor(secs / 60);
-    const s = secs % 60;
+    const total = Math.max(0, Math.round(secs));
+    const m = Math.floor(total / 60);
+    const s = total % 60;
     return `${m}m ${s < 10 ? "0" : ""}${s}s`;
   };
 
+  const displayElapsed =
+    isScanComplete && status?.processing_time_seconds != null
+      ? Math.round(status.processing_time_seconds)
+      : elapsed;
+
   const [showResearchInsights, setShowResearchInsights] = useState(false);
+  const [showCandidates, setShowCandidates] = useState(false);
 
   const liveMatches = status?.matched_images || [];
+  const candidateMatches = status?.candidate_images || [];
   const confirmedCount = Object.values(confirmedMap).filter((v) => v === true).length;
   const rejectedCount = Object.values(confirmedMap).filter((v) => v === false).length;
 
@@ -157,11 +166,15 @@ export default function ProcessingStatus({ sessionId, onComplete, onFailed }: Pr
       : null;
 
   const manualEstSecs =
-    status?.manual_search_estimated_seconds ||
-    (status?.total_images_discovered ? Math.round(status.total_images_discovered * 1.8) : null);
+    status?.manual_search_estimated_seconds
+      ? Math.round(status.manual_search_estimated_seconds)
+      : status?.total_images_discovered
+      ? Math.round(status.total_images_discovered * 1.8)
+      : null;
   const timeSaved =
-    status?.time_saved_percent ??
-    (manualEstSecs && manualEstSecs > elapsed ? Math.round(((manualEstSecs - elapsed) / manualEstSecs) * 100) : null);
+    manualEstSecs && manualEstSecs > displayElapsed
+      ? Math.round(((manualEstSecs - displayElapsed) / manualEstSecs) * 1000) / 10
+      : status?.time_saved_percent ?? null;
 
   return (
     <div className="w-full flex flex-col lg:flex-row gap-6">
@@ -243,56 +256,91 @@ export default function ProcessingStatus({ sessionId, onComplete, onFailed }: Pr
           </div>
           <div className="h-[1px] w-6 sm:w-12 bg-primary/40" />
           <div className="flex items-center gap-2">
-            <span className="material-symbols-outlined text-primary text-[18px] animate-pulse">psychology</span>
-            <span className="font-mono text-xs text-primary font-bold neon-text-primary">AI Recognition</span>
+            {isScanComplete ? (
+              <>
+                <span className="material-symbols-outlined text-tertiary text-[18px]">check_circle</span>
+                <span className="font-mono text-xs text-on-surface">AI Recognition</span>
+              </>
+            ) : (
+              <>
+                <span className="material-symbols-outlined text-primary text-[18px] animate-pulse">psychology</span>
+                <span className="font-mono text-xs text-primary font-bold neon-text-primary">AI Recognition</span>
+              </>
+            )}
           </div>
-          <div className="h-[1px] w-6 sm:w-12 bg-white/10 hidden sm:block" />
-          <div className="hidden sm:flex items-center gap-2 opacity-50">
-            <span className="material-symbols-outlined text-outline text-[18px]">summarize</span>
-            <span className="font-mono text-xs text-outline">Report Gen</span>
+          <div className={`h-[1px] w-6 sm:w-12 hidden sm:block ${isScanComplete ? "bg-tertiary/40" : "bg-white/10"}`} />
+          <div className={`hidden sm:flex items-center gap-2 ${isScanComplete ? "opacity-100" : "opacity-50"}`}>
+            <span className={`material-symbols-outlined text-[18px] ${isScanComplete ? "text-tertiary" : "text-outline"}`}>
+              {isScanComplete ? "fact_check" : "summarize"}
+            </span>
+            <span className={`font-mono text-xs ${isScanComplete ? "text-tertiary font-bold" : "text-outline"}`}>
+              {isScanComplete ? "Verify & Export" : "Report Gen"}
+            </span>
           </div>
         </div>
 
         {/* Center Scanner Panel */}
-        <div className="glass-panel rounded-2xl p-6 sm:p-8 flex flex-col items-center justify-center relative overflow-hidden min-h-[360px]">
-          {/* Live Scan Active Badge */}
-          <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full text-xs font-mono font-semibold bg-secondary/10 border border-secondary/40 text-secondary mb-4 glow-pulse">
-            <span className="w-2 h-2 rounded-full bg-secondary animate-ping" />
-            <span>@ LIVE SCAN ACTIVE</span>
-          </div>
+        <div className="glass-panel rounded-2xl p-6 sm:p-8 flex flex-col items-center justify-center relative overflow-hidden min-h-[340px]">
+          {/* Live Scan Active / Complete Badge */}
+          {isScanComplete ? (
+            <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full text-xs font-mono font-semibold bg-tertiary/15 border border-tertiary/40 text-tertiary mb-4">
+              <span className="material-symbols-outlined text-[14px]">check_circle</span>
+              <span>SCAN COMPLETE</span>
+            </div>
+          ) : (
+            <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full text-xs font-mono font-semibold bg-secondary/10 border border-secondary/40 text-secondary mb-4 glow-pulse">
+              <span className="w-2 h-2 rounded-full bg-secondary animate-ping" />
+              <span>@ LIVE SCAN ACTIVE</span>
+            </div>
+          )}
 
           <h2 className="font-display text-3xl sm:text-4xl font-bold text-white text-center mb-2 tracking-tight">
-            Deep Neural Scan
+            {isScanComplete ? "Neural Scan Complete" : "Deep Neural Scan"}
           </h2>
-          <p className="font-sans text-xs sm:text-sm text-on-surface-variant text-center mb-8 max-w-md">
-            Comparing 512-D embeddings across event photos in memory.
+          <p className="font-sans text-xs sm:text-sm text-on-surface-variant text-center mb-6 max-w-md">
+            {isScanComplete
+              ? "All photos analyzed. Review your matched photos below and tap Confirm to finalize your gallery."
+              : "Comparing 512-D embeddings across event photos in memory."}
           </p>
 
           {/* Central Animated HUD Biometric Radar Reticle */}
-          <div className="relative w-44 h-44 sm:w-52 sm:h-52 flex items-center justify-center my-4">
+          <div className="relative w-40 h-40 sm:w-48 sm:h-48 flex items-center justify-center my-3">
             {/* Outer radar circle */}
-            <div className="absolute inset-0 rounded-full border border-secondary/30 hud-radar-circle" />
-            <div className="absolute inset-4 rounded-full border border-dashed border-primary/40 animate-spin hud-radar-dashed" style={{ animationDuration: "16s" }} />
+            <div className={`absolute inset-0 rounded-full border hud-radar-circle ${isScanComplete ? "border-tertiary/40" : "border-secondary/30"}`} />
+            <div
+              className={`absolute inset-4 rounded-full border border-dashed hud-radar-dashed ${isScanComplete ? "border-tertiary/30" : "border-primary/40 animate-spin"}`}
+              style={isScanComplete ? undefined : { animationDuration: "16s" }}
+            />
             <div className="absolute inset-8 rounded-full border border-white/10 hud-radar-inner" />
 
             {/* Corner Brackets */}
-            <div className="absolute top-2 left-2 w-4 h-4 border-t-2 border-l-2 border-secondary hud-radar-reticle" />
-            <div className="absolute top-2 right-2 w-4 h-4 border-t-2 border-r-2 border-secondary hud-radar-reticle" />
-            <div className="absolute bottom-2 left-2 w-4 h-4 border-b-2 border-l-2 border-secondary hud-radar-reticle" />
-            <div className="absolute bottom-2 right-2 w-4 h-4 border-b-2 border-r-2 border-secondary hud-radar-reticle" />
+            <div className={`absolute top-2 left-2 w-4 h-4 border-t-2 border-l-2 hud-radar-reticle ${isScanComplete ? "border-tertiary" : "border-secondary"}`} />
+            <div className={`absolute top-2 right-2 w-4 h-4 border-t-2 border-r-2 hud-radar-reticle ${isScanComplete ? "border-tertiary" : "border-secondary"}`} />
+            <div className={`absolute bottom-2 left-2 w-4 h-4 border-b-2 border-l-2 hud-radar-reticle ${isScanComplete ? "border-tertiary" : "border-secondary"}`} />
+            <div className={`absolute bottom-2 right-2 w-4 h-4 border-b-2 border-r-2 hud-radar-reticle ${isScanComplete ? "border-tertiary" : "border-secondary"}`} />
 
-            {/* Rotating Radar Sweep Gradient */}
+            {/* Rotating Radar Sweep Gradient (only while actively scanning) */}
+            {!isScanComplete && (
+              <div
+                className="absolute inset-0 rounded-full animate-spin pointer-events-none opacity-40 conic-radar"
+                style={{
+                  background: "conic-gradient(from 0deg, rgba(76, 215, 246, 0.4) 0deg, transparent 90deg)",
+                  animationDuration: "3s",
+                }}
+              />
+            )}
+
+            {/* Center Biometric Face / Verified Icon */}
             <div
-              className="absolute inset-0 rounded-full animate-spin pointer-events-none opacity-40 conic-radar"
-              style={{
-                background: "conic-gradient(from 0deg, rgba(76, 215, 246, 0.4) 0deg, transparent 90deg)",
-                animationDuration: "3s",
-              }}
-            />
-
-            {/* Center Biometric Face Icon */}
-            <div className="relative z-10 w-16 h-16 rounded-full bg-surface-container flex items-center justify-center border border-secondary text-secondary shadow-[0_0_20px_rgba(76,215,246,0.5)] hud-radar-center">
-              <span className="material-symbols-outlined text-[32px] animate-pulse">face</span>
+              className={`relative z-10 w-16 h-16 rounded-full bg-surface-container flex items-center justify-center border hud-radar-center ${
+                isScanComplete
+                  ? "border-tertiary text-tertiary shadow-[0_0_20px_rgba(0,165,114,0.5)]"
+                  : "border-secondary text-secondary shadow-[0_0_20px_rgba(76,215,246,0.5)]"
+              }`}
+            >
+              <span className={`material-symbols-outlined text-[32px] ${isScanComplete ? "" : "animate-pulse"}`}>
+                {isScanComplete ? "verified" : "face"}
+              </span>
             </div>
           </div>
 
@@ -357,10 +405,12 @@ export default function ProcessingStatus({ sessionId, onComplete, onFailed }: Pr
           </div>
 
           <div className="glass-panel rounded-xl p-4">
-            <span className="font-mono text-[10px] uppercase text-on-surface-variant block">Scan Time / Pace</span>
+            <span className="font-mono text-[10px] uppercase text-on-surface-variant block">
+              {isScanComplete ? "Total Scan Time" : "Scan Time / Pace"}
+            </span>
             <div className="flex items-baseline gap-2 mt-1">
-              <span className="font-mono text-xl font-bold text-white">{formatTime(elapsed)}</span>
-              {status?.estimated_remaining_seconds ? (
+              <span className="font-mono text-xl font-bold text-white">{formatTime(displayElapsed)}</span>
+              {!isScanComplete && status?.estimated_remaining_seconds ? (
                 <span className="text-[10px] font-mono text-secondary">
                   (~{Math.round(status.estimated_remaining_seconds)}s left)
                 </span>
@@ -379,14 +429,14 @@ export default function ProcessingStatus({ sessionId, onComplete, onFailed }: Pr
             <div>
               <div className="flex items-center gap-2">
                 <span className="font-mono text-xs font-bold text-white">Automated Retrieval vs Manual Search</span>
-                {timeSaved && (
+                {timeSaved !== null && timeSaved > 0 && (
                   <span className="px-2 py-0.5 rounded-full bg-tertiary/20 text-tertiary text-[10px] font-mono font-bold">
                     {timeSaved}% Time Saved
                   </span>
                 )}
               </div>
               <p className="text-[11px] text-on-surface-variant mt-0.5">
-                Manual scrolling baseline: ~{manualEstSecs ? formatTime(manualEstSecs) : "--"} vs AI retrieval: {formatTime(elapsed)}
+                Manual scrolling baseline: ~{manualEstSecs ? formatTime(manualEstSecs) : "--"} vs AI retrieval: {formatTime(displayElapsed)}
                 {evaluatedCount > 0 && ` | Precision: ${precisionPct}% | Est. F1-Score: ${f1ScorePct}%`}
               </p>
             </div>
@@ -466,8 +516,8 @@ export default function ProcessingStatus({ sessionId, onComplete, onFailed }: Pr
 
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4 pb-3 border-b border-white/10">
               <div>
-                <div className="flex items-center gap-2">
-                  <span className="w-2.5 h-2.5 rounded-full bg-tertiary animate-ping" />
+                <div className="flex items-center gap-2 flex-wrap">
+                  {!isScanComplete && <span className="w-2.5 h-2.5 rounded-full bg-tertiary animate-ping" />}
                   <h3 className="font-display text-lg sm:text-xl font-bold text-white">
                     Found Matches for Verification ({liveMatches.length})
                   </h3>
@@ -487,15 +537,17 @@ export default function ProcessingStatus({ sessionId, onComplete, onFailed }: Pr
                 </p>
               </div>
 
-              <button
-                type="button"
-                onClick={handleFinalizeVerification}
-                disabled={isSubmitting}
-                className="px-4 py-2 rounded-xl bg-gradient-to-r from-primary to-secondary text-on-primary text-xs font-bold font-mono flex items-center gap-1.5 shadow-md hover:brightness-110 transition-all"
-              >
-                <span>{isScanComplete ? `✓ Confirm & Finish (${confirmedCount})` : `View Results (${confirmedCount})`}</span>
-                <span className="material-symbols-outlined text-sm">arrow_forward</span>
-              </button>
+              {!isScanComplete && (
+                <button
+                  type="button"
+                  onClick={handleFinalizeVerification}
+                  disabled={isSubmitting}
+                  className="px-4 py-2 rounded-xl bg-gradient-to-r from-primary to-secondary text-on-primary text-xs font-bold font-mono flex items-center gap-1.5 shadow-md hover:brightness-110 transition-all"
+                >
+                  <span>View Results ({confirmedCount})</span>
+                  <span className="material-symbols-outlined text-sm">arrow_forward</span>
+                </button>
+              )}
             </div>
 
             {/* Scrollable Live Grid */}
@@ -585,6 +637,104 @@ export default function ProcessingStatus({ sessionId, onComplete, onFailed }: Pr
                 );
               })}
             </div>
+
+            {/* Potential Matches (Lower-Confidence Candidates) Section */}
+            {candidateMatches.length > 0 && (
+              <div className="mt-5 pt-4 border-t border-white/10">
+                <button
+                  type="button"
+                  onClick={() => setShowCandidates((prev) => !prev)}
+                  className="w-full flex items-center justify-between px-4 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 transition-colors"
+                >
+                  <div className="flex items-center gap-2 text-xs font-mono">
+                    <span className="material-symbols-outlined text-secondary text-[16px]">manage_search</span>
+                    <span className="font-bold text-white">
+                      Potential Matches to Review ({candidateMatches.length})
+                    </span>
+                    <span className="text-on-surface-variant hidden sm:inline">
+                      — Side angles, dim lighting, or distant shots. Tap Yes to include any that are you.
+                    </span>
+                  </div>
+                  <span className="material-symbols-outlined text-secondary text-[18px]">
+                    {showCandidates ? "expand_less" : "expand_more"}
+                  </span>
+                </button>
+
+                {showCandidates && (
+                  <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3.5 max-h-[380px] overflow-y-auto pr-1">
+                    {candidateMatches.map((item, idx) => {
+                      const isConfirmed = confirmedMap[item.filename] === true;
+                      const isRejected = confirmedMap[item.filename] === false;
+                      const pct = item.confidence_percent || Math.round(item.similarity_score * 100);
+
+                      return (
+                        <div
+                          key={item.filename || idx}
+                          className={`rounded-xl border transition-all overflow-hidden flex flex-col bg-surface-container/70 ${
+                            isConfirmed
+                              ? "border-tertiary ring-2 ring-tertiary/50 bg-tertiary/10"
+                              : isRejected
+                              ? "border-error/30 opacity-40 grayscale"
+                              : "border-white/10 hover:border-secondary/50"
+                          }`}
+                        >
+                          <div className="relative aspect-square w-full bg-black/40 overflow-hidden">
+                            <img
+                              src={item.download_url}
+                              alt={item.filename}
+                              className="w-full h-full object-cover"
+                              loading="lazy"
+                            />
+                            <div className="absolute top-2 left-2 px-2 py-0.5 rounded-full bg-black/70 backdrop-blur-md border border-secondary/30 text-[10px] font-mono text-secondary font-bold">
+                              {pct}% possible
+                            </div>
+                            {isConfirmed && (
+                              <div className="absolute top-2 right-2 px-1.5 py-0.5 rounded bg-tertiary text-on-tertiary flex items-center gap-1 font-bold text-[10px] shadow-md font-mono">
+                                <span>✓ ME</span>
+                              </div>
+                            )}
+                            {isRejected && (
+                              <div className="absolute top-2 right-2 px-1.5 py-0.5 rounded bg-error text-white flex items-center gap-1 font-bold text-[10px] shadow-md font-mono">
+                                <span>✕ NOT ME</span>
+                              </div>
+                            )}
+                          </div>
+                          <div className="p-2.5 flex flex-col gap-2">
+                            <p className="text-[11px] font-mono text-white truncate" title={item.filename}>
+                              {item.filename}
+                            </p>
+                            <div className="flex items-center gap-1.5 pt-1 border-t border-white/10">
+                              <button
+                                type="button"
+                                onClick={() => handleConfirm(item.filename, true)}
+                                className={`flex-1 py-1 px-1.5 rounded text-[11px] font-mono font-semibold flex items-center justify-center gap-1 transition-colors ${
+                                  isConfirmed
+                                    ? "bg-tertiary text-on-tertiary font-bold"
+                                    : "bg-tertiary/20 text-tertiary hover:bg-tertiary/30 border border-tertiary/40"
+                                }`}
+                              >
+                                <span>✓ Yes</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleConfirm(item.filename, false)}
+                                className={`flex-1 py-1 px-1.5 rounded text-[11px] font-mono font-semibold flex items-center justify-center gap-1 transition-colors ${
+                                  isRejected
+                                    ? "bg-error text-white font-bold"
+                                    : "bg-white/5 text-on-surface-variant hover:bg-error/20 hover:text-error border border-white/10"
+                                }`}
+                              >
+                                <span>✕ No</span>
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Bottom Verification Action Bar */}
             <div className="mt-5 pt-4 border-t border-white/10 flex flex-col sm:flex-row items-center justify-between gap-4">
