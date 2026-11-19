@@ -20,8 +20,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY image-sorter/backend/requirements.txt /app/image-sorter/backend/requirements.txt
 RUN python -m pip install --upgrade pip && pip install -r /app/image-sorter/backend/requirements.txt
 
-# Pre-download ArcFace model weights into the container image for zero cold-start delay
-RUN python -c "from deepface import DeepFace; DeepFace.build_model('ArcFace')" || true
+# Pre-download ArcFace, Facenet512, and SSD detector weights into the container image for zero cold-start downloads
+ENV TF_USE_LEGACY_KERAS=1
+RUN python -c "import numpy as np; from deepface import DeepFace; DeepFace.build_model('ArcFace'); DeepFace.build_model('Facenet512'); DeepFace.extract_faces(img_path=np.zeros((112,112,3), dtype=np.uint8), detector_backend='ssd', enforce_detection=False)" || true
 
 COPY image-sorter/backend /app/image-sorter/backend
 

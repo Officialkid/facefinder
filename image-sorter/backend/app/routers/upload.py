@@ -238,3 +238,126 @@ async def upload_dataset_zip(
         from app.services.dataset_retrieval import _cleanup_path
         _cleanup_path(staging_dir)
 
+
+@router.post("/dataset-zip-chunk", summary="Upload local dataset ZIP in chunks (bypasses 32MB proxy limit)")
+async def upload_dataset_zip_chunk(
+    request: Request,
+    session_id: str,
+    filename: str,
+    chunk_index: int,
+    total_chunks: int,
+    file: UploadFile = File(...),
+):
+    """
+    Receive a local ZIP archive in <=15MB chunks so large archives (up to 300MB)
+    upload reliably through Cloud Run's 32MiB HTTP request body cap without RAM spikes.
+    Extracts and finalizes on the last chunk.
+    """
+    session = get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found.")
+
+    safe_filename = Path(filename or "dataset.zip").name
+    if not safe_filename.lower().endswith(".zip"):
+        raise HTTPException(status_code=400, detail="Uploaded file must be a .zip archive.")
+    if total_chunks < 1 or chunk_index < 0 or chunk_index >= total_chunks:
+        raise HTTPException(status_code=400, detail="Invalid chunk index or total chunks.")
+
+    session_dir = get_session_temp_dir(session_id)
+    session_dir.mkdir(parents=True, exist_ok=True)
+    temp_zip_path = session_dir / f"chunked_dataset_{safe_filename}"
+    staging_dir = session_dir / "dataset_staging"
+    dataset_dir = session_dir / "dataset"
+
+    mode = "wb" if chunk_index == 0 else "ab"
+    try:
+        chunk_bytes = await file.read()
+        with open(temp_zip_path, mode) as f:
+            f.write(chunk_bytes)
+
+        if temp_zip_path.stat().st_size > 300 * 1024 * 1024:
+            temp_zip_path.unlink(missing_ok=True)
+            raise HTTPException(status_code=413, detail="ZIP archive exceeds 300MB limit.")
+
+        if chunk_index < total_chunks - 1:
+            return {
+                "session_id": session_id,
+                "status": "uploading",
+                "filename": safe_filename,
+                "chunk_index": chunk_index,
+                "total_chunks": total_chunks,
+                "image_count": 0,
+                "message": f"Uploaded chunk {chunk_index + 1} of {total_chunks}.",
+            }
+
+        # Final chunk received — validate & extract safely
+        import zipfile
+        from app.models.schemas import ErrorCode
+        from app.services.dataset_retrieval import (
+            _safe_extract_zip,
+            _count_supported_images,
+            _cleanup_path,
+            DatasetRetrievalError,
+        )
+
+        if not zipfile.is_zipfile(temp_zip_path):
+            raise HTTPException(status_code=400, detail="Uploaded file is not a valid ZIP archive.")
+
+        _cleanup_path(staging_dir)
+        staging_dir.mkdir(parents=True, exist_ok=True)
+        _safe_extract_zip(temp_zip_path, staging_dir)
+        temp_zip_path.unlink(missing_ok=True)
+
+        image_count = _count_supported_images(staging_dir)
+        if image_count == 0:
+            raise HTTPException(
+                status_code=400,
+                detail="The ZIP archive contains no supported image files (JPG, PNG, WEBP, BMP).",
+            )
+
+        _cleanup_path(dataset_dir)
+        try:
+            staging_dir.replace(dataset_dir)
+        except OSError:
+            import shutil
+            dataset_dir.mkdir(parents=True, exist_ok=True)
+            for item in staging_dir.iterdir():
+                target = dataset_dir / item.name
+                _cleanup_path(target)
+                shutil.move(str(item), str(target))
+
+        session.dataset_source = f"local_zip://{safe_filename}"
+        session.dataset_download_url = f"local_zip://{safe_filename}"
+        session.dataset_provider = "Local ZIP Upload"
+        session.dataset_source_kind = "direct_file"
+        session.total_images_discovered = image_count
+        session.stage_message = f"Loaded {image_count} photos from {safe_filename}."
+        from app.services.session_store import update_session
+        update_session(session)
+
+        logger.info("[%s] Chunked ZIP upload extracted %d photos from %s", session_id, image_count, safe_filename)
+        return {
+            "session_id": session_id,
+            "status": "ready",
+            "filename": safe_filename,
+            "image_count": image_count,
+            "message": f"Successfully extracted {image_count} photos from {safe_filename}.",
+        }
+    except HTTPException:
+        if chunk_index == total_chunks - 1:
+            temp_zip_path.unlink(missing_ok=True)
+        raise
+    except DatasetRetrievalError as exc:
+        from app.models.schemas import ErrorCode
+        temp_zip_path.unlink(missing_ok=True)
+        status = 413 if getattr(exc, "code", None) == ErrorCode.DATASET_TOO_LARGE else 400
+        raise HTTPException(status_code=status, detail=f"Invalid ZIP archive: {str(exc)}")
+    except Exception as e:
+        temp_zip_path.unlink(missing_ok=True)
+        logger.error("Failed chunked ZIP upload for session %s: %s", session_id, e, exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to extract ZIP archive: {str(e)}")
+    finally:
+        if chunk_index == total_chunks - 1:
+            from app.services.dataset_retrieval import _cleanup_path
+            _cleanup_path(staging_dir)
+

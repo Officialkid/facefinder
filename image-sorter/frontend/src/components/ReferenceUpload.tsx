@@ -6,6 +6,34 @@ interface Props {
   onSuccess: (result: UploadResponse, previewUrl: string, selectedFaceIndex?: number | null) => void;
 }
 
+async function compressReferenceImage(file: File, maxDim = 1200): Promise<File> {
+  if (typeof window === "undefined" || file.size <= 450 * 1024) {
+    return file;
+  }
+  try {
+    const bitmap = await createImageBitmap(file);
+    const { width, height } = bitmap;
+    const scale = Math.max(width, height) > maxDim ? maxDim / Math.max(width, height) : 1;
+    const targetW = Math.max(1, Math.round(width * scale));
+    const targetH = Math.max(1, Math.round(height * scale));
+    const canvas = document.createElement("canvas");
+    canvas.width = targetW;
+    canvas.height = targetH;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return file;
+    ctx.drawImage(bitmap, 0, 0, targetW, targetH);
+    bitmap.close();
+    const blob: Blob | null = await new Promise((resolve) =>
+      canvas.toBlob(resolve, "image/jpeg", 0.9)
+    );
+    if (!blob || blob.size >= file.size) return file;
+    const baseName = file.name.replace(/\.[^.]+$/, "");
+    return new File([blob], `${baseName}.jpg`, { type: "image/jpeg" });
+  } catch {
+    return file;
+  }
+}
+
 export default function ReferenceUpload({ onSuccess }: Props) {
   const [preview, setPreview] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -55,7 +83,8 @@ export default function ReferenceUpload({ onSuccess }: Props) {
     setError(null);
 
     try {
-      const result = await ImageSorterAPI.uploadReference(selectedFile);
+      const optimizedFile = await compressReferenceImage(selectedFile);
+      const result = await ImageSorterAPI.uploadReference(optimizedFile);
       if (result.detected_faces && result.detected_faces.length === 0) {
         setError("No face detected in this photo. Please upload a clear, front-facing portrait.");
         return;
@@ -289,9 +318,9 @@ export default function ReferenceUpload({ onSuccess }: Props) {
             </div>
           ) : (
             <div className="w-full bg-surface-container-low border border-secondary/40 rounded-xl p-6 flex flex-col items-center space-y-4">
-              <div className="relative w-44 h-44 rounded-2xl overflow-hidden border-2 border-secondary shadow-[0_0_20px_rgba(34,197,94,0.25)]">
-                <img src={preview} alt="Reference Preview" className="w-full h-full object-cover" />
-                <div className="absolute inset-2 border border-dashed border-secondary/60 rounded-xl pointer-events-none" />
+              <div className="relative w-52 h-52 rounded-2xl overflow-hidden border-2 border-secondary bg-black shadow-[0_0_20px_rgba(34,197,94,0.25)]">
+                <img src={preview} alt="Reference Preview" className="w-full h-full object-contain" />
+                <div className="absolute inset-2 border border-dashed border-secondary/40 rounded-xl pointer-events-none" />
                 <div className="absolute top-2 left-2 w-3 h-3 border-t-2 border-l-2 border-secondary" />
                 <div className="absolute top-2 right-2 w-3 h-3 border-t-2 border-r-2 border-secondary" />
                 <div className="absolute bottom-2 left-2 w-3 h-3 border-b-2 border-l-2 border-secondary" />

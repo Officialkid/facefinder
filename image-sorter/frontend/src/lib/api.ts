@@ -316,19 +316,48 @@ export const ImageSorterAPI = {
 
   uploadDatasetZip: async (
     session_id: string,
-    file: File
+    file: File,
+    onProgress?: (percent: number) => void
   ): Promise<{ session_id: string; status: string; filename: string; image_count: number; message: string }> => {
-    const formData = new FormData();
-    formData.append("file", file);
-    const { data } = await api.post<{ session_id: string; status: string; filename: string; image_count: number; message: string }>(
-      `/upload/dataset-zip?session_id=${encodeURIComponent(session_id)}`,
-      formData,
-      {
+    // Upload in 8MB chunks to stay well below Cloud Run's 32MiB HTTP request body limit
+    const CHUNK_SIZE = 8 * 1024 * 1024;
+    const totalChunks = Math.max(1, Math.ceil(file.size / CHUNK_SIZE));
+    let lastData: { session_id: string; status: string; filename: string; image_count: number; message: string } | null = null;
+
+    for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
+      const start = chunkIndex * CHUNK_SIZE;
+      const end = Math.min(file.size, start + CHUNK_SIZE);
+      const blob = file.slice(start, end);
+      const formData = new FormData();
+      formData.append("file", blob, file.name);
+
+      const url =
+        `/upload/dataset-zip-chunk?session_id=${encodeURIComponent(session_id)}` +
+        `&filename=${encodeURIComponent(file.name)}` +
+        `&chunk_index=${chunkIndex}&total_chunks=${totalChunks}`;
+
+      const { data } = await api.post<{
+        session_id: string;
+        status: string;
+        filename: string;
+        image_count: number;
+        message: string;
+      }>(url, formData, {
         headers: { "Content-Type": "multipart/form-data" },
         timeout: 300000,
-      }
-    );
-    return data;
+        onUploadProgress: (evt) => {
+          if (onProgress && evt.total) {
+            const chunkFrac = evt.loaded / evt.total;
+            const overall = Math.min(99, Math.round(((chunkIndex + chunkFrac) / totalChunks) * 100));
+            onProgress(overall);
+          }
+        },
+      });
+      lastData = data;
+    }
+
+    if (onProgress) onProgress(100);
+    return lastData!;
   },
 
   startProcessing: async (

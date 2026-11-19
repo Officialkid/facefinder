@@ -268,6 +268,7 @@ def _extract_pixieset_image_urls(
     opener: Optional[urllib.request.OpenerDirector] = None,
     email: Optional[str] = None,
     password: Optional[str] = None,
+    cffi_session=None,
 ) -> list[str]:
     """
     Extract full-resolution photo URLs from a Pixieset gallery using its client API.
@@ -325,7 +326,19 @@ def _extract_pixieset_image_urls(
                     "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
                 },
             )
-            http_client.open(req, timeout=DOWNLOAD_TIMEOUT_SECONDS)
+            if cffi_session is not None:
+                cffi_session.post(
+                    save_email_url,
+                    data={"email": email.strip(), "cid": collection_id, "cuk": collection_url_key},
+                    headers={
+                        "User-Agent": REQUEST_HEADERS["User-Agent"],
+                        "Referer": base_url,
+                        "X-Requested-With": "XMLHttpRequest",
+                    },
+                    timeout=DOWNLOAD_TIMEOUT_SECONDS,
+                )
+            else:
+                http_client.open(req, timeout=DOWNLOAD_TIMEOUT_SECONDS)
             logger.info("Registered visitor email for Pixieset collection %s", collection_id)
         except Exception as auth_err:
             logger.debug("Pixieset visitor email registration attempt: %s", auth_err)
@@ -351,7 +364,19 @@ def _extract_pixieset_image_urls(
                     "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
                 },
             )
-            http_client.open(req, timeout=DOWNLOAD_TIMEOUT_SECONDS)
+            if cffi_session is not None:
+                cffi_session.post(
+                    verify_pw_url,
+                    data={"password": pw_val, "pin": pw_val, "cid": collection_id, "cuk": collection_url_key},
+                    headers={
+                        "User-Agent": REQUEST_HEADERS["User-Agent"],
+                        "Referer": base_url,
+                        "X-Requested-With": "XMLHttpRequest",
+                    },
+                    timeout=DOWNLOAD_TIMEOUT_SECONDS,
+                )
+            else:
+                http_client.open(req, timeout=DOWNLOAD_TIMEOUT_SECONDS)
             logger.info("Sent password verification for Pixieset collection %s", collection_id)
         except Exception as pw_err:
             logger.debug("Pixieset password verification attempt: %s", pw_err)
@@ -413,47 +438,56 @@ def _extract_pixieset_image_urls(
             },
         )
         data = None
-        try:
-            with http_client.open(req, timeout=DOWNLOAD_TIMEOUT_SECONDS) as resp:
-                data = json.loads(resp.read().decode("utf-8"))
-        except DatasetRetrievalError:
-            raise
-        except Exception as exc:
-            # Fallback to requests or curl if urllib gets blocked by Cloudflare TLS/browser checks
+        api_headers = {
+            "User-Agent": REQUEST_HEADERS["User-Agent"],
+            "Referer": base_url,
+            "X-Requested-With": "XMLHttpRequest",
+            "Accept": "application/json, text/javascript, */*; q=0.01",
+        }
+        if cffi_session is not None:
             try:
-                import requests
-                headers = {
-                    "User-Agent": REQUEST_HEADERS["User-Agent"],
-                    "Referer": base_url,
-                    "X-Requested-With": "XMLHttpRequest",
-                    "Accept": "application/json, text/javascript, */*; q=0.01",
-                }
-                resp = requests.get(req_url, headers=headers, timeout=25)
-                if resp.status_code == 200 and resp.text:
-                    data = resp.json()
-            except Exception:
-                pass
+                cffi_resp = cffi_session.get(req_url, headers=api_headers, timeout=DOWNLOAD_TIMEOUT_SECONDS)
+                if cffi_resp.status_code == 200 and cffi_resp.text and not _is_cloudflare_challenge(cffi_resp.text):
+                    data = cffi_resp.json()
+            except Exception as cffi_exc:
+                logger.debug("curl_cffi Pixieset loadphotos fallback for slug '%s': %s", slug, cffi_exc)
 
-            if not data:
+        if data is None:
+            try:
+                with http_client.open(req, timeout=DOWNLOAD_TIMEOUT_SECONDS) as resp:
+                    data = json.loads(resp.read().decode("utf-8"))
+            except DatasetRetrievalError:
+                raise
+            except Exception as exc:
+                # Fallback to requests or curl if urllib gets blocked by Cloudflare TLS/browser checks
                 try:
-                    import subprocess
-                    curl_bin = _get_curl_cmd()
-                    curl_cmd = [
-                        curl_bin, "-s", "-L", req_url,
-                        "-H", f"User-Agent: {REQUEST_HEADERS['User-Agent']}",
-                        "-H", f"Referer: {base_url}",
-                        "-H", "X-Requested-With: XMLHttpRequest",
-                        "-H", "Accept: application/json, text/javascript, */*; q=0.01",
-                    ]
-                    curl_res = subprocess.run(curl_cmd, capture_output=True, text=True, encoding="utf-8", errors="ignore", timeout=25)
-                    if curl_res.returncode == 0 and curl_res.stdout:
-                        data = json.loads(curl_res.stdout)
-                    else:
-                        logger.warning("Failed to fetch Pixieset gallery slug '%s': %s", slug, exc)
+                    import requests
+                    resp = requests.get(req_url, headers=api_headers, timeout=25)
+                    if resp.status_code == 200 and resp.text:
+                        data = resp.json()
+                except Exception:
+                    pass
+
+                if not data:
+                    try:
+                        import subprocess
+                        curl_bin = _get_curl_cmd()
+                        curl_cmd = [
+                            curl_bin, "-s", "-L", req_url,
+                            "-H", f"User-Agent: {REQUEST_HEADERS['User-Agent']}",
+                            "-H", f"Referer: {base_url}",
+                            "-H", "X-Requested-With: XMLHttpRequest",
+                            "-H", "Accept: application/json, text/javascript, */*; q=0.01",
+                        ]
+                        curl_res = subprocess.run(curl_cmd, capture_output=True, text=True, encoding="utf-8", errors="ignore", timeout=25)
+                        if curl_res.returncode == 0 and curl_res.stdout:
+                            data = json.loads(curl_res.stdout)
+                        else:
+                            logger.warning("Failed to fetch Pixieset gallery slug '%s': %s", slug, exc)
+                            continue
+                    except Exception as curl_err:
+                        logger.warning("Failed to fetch Pixieset gallery slug '%s': %s", slug, curl_err)
                         continue
-                except Exception as curl_err:
-                    logger.warning("Failed to fetch Pixieset gallery slug '%s': %s", slug, curl_err)
-                    continue
 
         if data:
             # Check for explicit Pixieset authentication/gate errors
@@ -503,6 +537,7 @@ def _extract_gallery_image_urls(
     opener: Optional[urllib.request.OpenerDirector] = None,
     email: Optional[str] = None,
     password: Optional[str] = None,
+    cffi_session=None,
 ) -> list[str]:
     # Check Pixieset API extraction first
     if "pixieset.com" in base_url.lower():
@@ -512,6 +547,7 @@ def _extract_gallery_image_urls(
             opener=opener,
             email=email,
             password=password,
+            cffi_session=cffi_session,
         )
         if pixieset_urls:
             logger.info("Discovered %d photos via Pixieset client API for %s", len(pixieset_urls), base_url)
@@ -539,12 +575,48 @@ def _get_curl_cmd() -> str:
     return shutil.which("curl") or shutil.which("curl.exe") or "curl"
 
 
+def _create_cffi_session():
+    """Create a Chrome-impersonating HTTP session (curl_cffi) to pass Cloudflare TLS checks on Cloud Run."""
+    try:
+        from curl_cffi import requests as cffi_requests
+        return cffi_requests.Session(impersonate="chrome124")
+    except Exception:
+        return None
+
+
+def _is_cloudflare_challenge(text: str) -> bool:
+    if not text:
+        return True
+    low = text.lower()
+    return (
+        "<title>just a moment...</title>" in low
+        or "cf-browser-verification" in low
+        or "attention required! | cloudflare" in low
+        or "enable javascript and cookies to continue" in low
+    )
+
+
+def _fetch_gallery_page_with_cffi(url: str, cffi_session=None) -> Optional[str]:
+    """Fetch gallery page using Chrome 124 TLS impersonation with persistent session cookies."""
+    sess = cffi_session or _create_cffi_session()
+    if sess is None:
+        return None
+    try:
+        resp = sess.get(url, headers=REQUEST_HEADERS, timeout=DOWNLOAD_TIMEOUT_SECONDS, allow_redirects=True)
+        if resp.status_code == 200 and resp.text and not _is_cloudflare_challenge(resp.text):
+            return resp.text
+        logger.warning("curl_cffi gallery fetch returned status=%s (cf_challenge=%s) for %s", resp.status_code, _is_cloudflare_challenge(resp.text or ""), url)
+    except Exception as exc:
+        logger.debug("curl_cffi fallback failed for %s: %s", url, exc)
+    return None
+
+
 def _fetch_gallery_page_with_requests(url: str) -> Optional[str]:
     """Fallback fetcher using python requests with browser session headers."""
     try:
         import requests
         resp = requests.get(url, headers=REQUEST_HEADERS, timeout=DOWNLOAD_TIMEOUT_SECONDS, allow_redirects=True)
-        if resp.status_code == 200 and resp.text:
+        if resp.status_code == 200 and resp.text and not _is_cloudflare_challenge(resp.text):
             return resp.text
     except Exception as exc:
         logger.debug("requests fallback failed for %s: %s", url, exc)
@@ -563,7 +635,7 @@ def _fetch_gallery_page_with_curl(url: str) -> Optional[str]:
             "-H", "Accept-Language: en-US,en;q=0.9",
         ]
         res = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="ignore", timeout=25)
-        if res.returncode == 0 and res.stdout:
+        if res.returncode == 0 and res.stdout and not _is_cloudflare_challenge(res.stdout):
             lower_out = res.stdout.lower()
             if "<html" in lower_out or "collectionid" in lower_out or "pixieset" in lower_out:
                 return res.stdout
@@ -572,7 +644,13 @@ def _fetch_gallery_page_with_curl(url: str) -> Optional[str]:
     return None
 
 
-def _fetch_gallery_page(url: str, opener: Optional[urllib.request.OpenerDirector] = None) -> str:
+def _fetch_gallery_page(url: str, opener: Optional[urllib.request.OpenerDirector] = None, cffi_session=None) -> str:
+    # For Pixieset, prefer Chrome TLS impersonation with persistent cookies first (avoids Cloud Run 403/CF challenges)
+    if "pixieset.com" in url.lower() and cffi_session is not None:
+        cffi_html = _fetch_gallery_page_with_cffi(url, cffi_session=cffi_session)
+        if cffi_html:
+            return cffi_html
+
     req = _build_request(url, method="GET")
     try:
         response_ctx = opener.open(req, timeout=DOWNLOAD_TIMEOUT_SECONDS) if opener is not None else urllib.request.urlopen(req, timeout=DOWNLOAD_TIMEOUT_SECONDS)
@@ -583,10 +661,17 @@ def _fetch_gallery_page(url: str, opener: Optional[urllib.request.OpenerDirector
                     ErrorCode.DATASET_INVALID,
                     "Dataset URL did not return a downloadable file or a supported public gallery page.",
                 )
-            raw_html = response.read()
-            return raw_html.decode("utf-8", errors="ignore")
+            raw_html = response.read().decode("utf-8", errors="ignore")
+            if _is_cloudflare_challenge(raw_html):
+                cffi_html = _fetch_gallery_page_with_cffi(url, cffi_session=cffi_session)
+                if cffi_html:
+                    return cffi_html
+            return raw_html
     except HTTPError as e:
         logger.error(f"HTTP error fetching gallery page {url}: {e.code} {e.reason}")
+        cffi_html = _fetch_gallery_page_with_cffi(url, cffi_session=cffi_session)
+        if cffi_html:
+            return cffi_html
         req_html = _fetch_gallery_page_with_requests(url)
         if req_html:
             return req_html
@@ -596,7 +681,7 @@ def _fetch_gallery_page(url: str, opener: Optional[urllib.request.OpenerDirector
         if e.code in (401, 403):
             raise DatasetRetrievalError(
                 ErrorCode.DATASET_UNREACHABLE,
-                "This gallery requires a password or email registration to access. Please provide your gallery password or email in the scan form above.",
+                "This gallery requires a password or email registration, or blocked the cloud server IP. Try entering your email/password, or upload a local ZIP archive instead.",
             ) from e
         raise DatasetRetrievalError(
             ErrorCode.DATASET_UNREACHABLE,
@@ -604,6 +689,9 @@ def _fetch_gallery_page(url: str, opener: Optional[urllib.request.OpenerDirector
         ) from e
     except (URLError, TimeoutError) as e:
         logger.error(f"Connection error fetching gallery page {url}: {e}")
+        cffi_html = _fetch_gallery_page_with_cffi(url, cffi_session=cffi_session)
+        if cffi_html:
+            return cffi_html
         req_html = _fetch_gallery_page_with_requests(url)
         if req_html:
             return req_html
@@ -790,18 +878,20 @@ def _download_gallery_dataset(
     password: Optional[str] = None,
 ) -> None:
     opener = None
-    if email or password:
+    if email or password or "pixieset.com" in page_url.lower():
         cookie_jar = http.cookiejar.CookieJar()
         opener = _get_safe_opener(urllib.request.HTTPCookieProcessor(cookie_jar))
+    cffi_session = _create_cffi_session() if "pixieset.com" in page_url.lower() else None
 
     provider_name = _provider_label(page_url)
-    page_html = _fetch_gallery_page(page_url, opener=opener)
+    page_html = _fetch_gallery_page(page_url, opener=opener, cffi_session=cffi_session)
     image_urls = _extract_gallery_image_urls(
         page_html,
         page_url,
         opener=opener,
         email=email,
         password=password,
+        cffi_session=cffi_session,
     )
 
     if not image_urls:

@@ -27,6 +27,7 @@ export default function DatasetForm({ sessionId, referencePreview, selectedFaceI
   // ZIP upload state
   const [zipFile, setZipFile] = useState<File | null>(null);
   const [zipUploading, setZipUploading] = useState(false);
+  const [zipUploadPct, setZipUploadPct] = useState(0);
   const [zipReadyCount, setZipReadyCount] = useState<number | null>(null);
 
   const handleZipDrop = useCallback(async (acceptedFiles: File[]) => {
@@ -41,9 +42,12 @@ export default function DatasetForm({ sessionId, referencePreview, selectedFaceI
     setZipFile(file);
     setError(null);
     setZipUploading(true);
+    setZipUploadPct(0);
 
     try {
-      const res = await ImageSorterAPI.uploadDatasetZip(sessionId, file);
+      const res = await ImageSorterAPI.uploadDatasetZip(sessionId, file, (pct) => {
+        setZipUploadPct(pct);
+      });
       setZipReadyCount(res.image_count);
       setDatasetUrl(`local_zip://${file.name}`);
     } catch (err: any) {
@@ -194,7 +198,7 @@ export default function DatasetForm({ sessionId, referencePreview, selectedFaceI
                     src={imgSrc}
                     onError={() => setImgSrc(ImageSorterAPI.getReferenceImageUrl(sessionId))}
                     alt="Target Reference"
-                    className="w-full h-full object-cover"
+                    className="w-full h-full object-contain bg-black"
                   />
                 </div>
                 <div className="min-w-0">
@@ -363,9 +367,19 @@ export default function DatasetForm({ sessionId, referencePreview, selectedFaceI
                     <input {...getInputProps()} />
 
                     {zipUploading ? (
-                      <div className="flex flex-col items-center gap-2 py-2">
+                      <div className="flex flex-col items-center gap-2 py-2 w-full max-w-xs">
                         <div className="w-6 h-6 rounded-full border-2 border-tertiary border-t-transparent animate-spin" />
-                        <span className="font-mono text-xs text-tertiary font-medium">Extracting ZIP archive photos...</span>
+                        <span className="font-mono text-xs text-tertiary font-medium">
+                          {zipUploadPct < 99
+                            ? `Uploading ZIP archive... ${zipUploadPct}%`
+                            : "Extracting ZIP archive photos..."}
+                        </span>
+                        <div className="w-full h-1.5 rounded-full bg-surface-variant overflow-hidden">
+                          <div
+                            className="h-full bg-gradient-to-r from-primary to-secondary transition-all duration-200 rounded-full"
+                            style={{ width: `${Math.max(5, zipUploadPct)}%` }}
+                          />
+                        </div>
                       </div>
                     ) : zipFile && zipReadyCount !== null ? (
                       <div className="flex items-center justify-between w-full px-2">
