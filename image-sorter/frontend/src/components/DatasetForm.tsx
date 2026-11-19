@@ -65,10 +65,10 @@ export default function DatasetForm({ sessionId, referencePreview, selectedFaceI
     onDrop: handleZipDrop,
     accept: { "application/zip": [".zip"], "application/x-zip-compressed": [".zip"] },
     maxFiles: 1,
-    maxSize: 300 * 1024 * 1024,
+    maxSize: 2 * 1024 * 1024 * 1024,
     noClick: false,
     onDropRejected: (rejections) => {
-      const msg = rejections[0]?.errors[0]?.message ?? "File rejected. Please upload a ZIP under 300MB.";
+      const msg = rejections[0]?.errors[0]?.message ?? "File rejected. Please upload a ZIP under 2GB.";
       setError(msg);
     },
   });
@@ -406,7 +406,7 @@ export default function DatasetForm({ sessionId, referencePreview, selectedFaceI
                         </div>
                         <div>
                           <span className="font-mono text-xs font-bold text-white">Click or drag &amp; drop your .ZIP file here</span>
-                          <p className="font-mono text-[10px] text-outline mt-0.5">Supports ZIP archives containing 1 to 1,000+ event photos (JPG, PNG, WEBP)</p>
+                          <p className="font-mono text-[10px] text-outline mt-0.5">Supports ZIP archives up to 2GB containing 1 to 10,000 event photos (JPG, PNG, WEBP)</p>
                         </div>
                       </div>
                     )}

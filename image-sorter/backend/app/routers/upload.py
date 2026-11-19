@@ -166,8 +166,8 @@ async def upload_dataset_zip(
 
     try:
         content = await file.read()
-        if len(content) > 300 * 1024 * 1024:
-            raise HTTPException(status_code=413, detail="ZIP archive exceeds 300MB limit.")
+        if len(content) > 2048 * 1024 * 1024:
+            raise HTTPException(status_code=413, detail="ZIP archive exceeds 2GB limit.")
 
         with open(temp_zip_path, "wb") as f:
             f.write(content)
@@ -275,9 +275,9 @@ async def upload_dataset_zip_chunk(
         with open(temp_zip_path, mode) as f:
             f.write(chunk_bytes)
 
-        if temp_zip_path.stat().st_size > 300 * 1024 * 1024:
+        if temp_zip_path.stat().st_size > 2048 * 1024 * 1024:
             temp_zip_path.unlink(missing_ok=True)
-            raise HTTPException(status_code=413, detail="ZIP archive exceeds 300MB limit.")
+            raise HTTPException(status_code=413, detail="ZIP archive exceeds 2GB limit.")
 
         if chunk_index < total_chunks - 1:
             return {

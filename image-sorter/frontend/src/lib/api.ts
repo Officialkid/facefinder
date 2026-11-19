@@ -329,8 +329,8 @@ export const ImageSorterAPI = {
     file: File,
     onProgress?: (percent: number) => void
   ): Promise<{ session_id: string; status: string; filename: string; image_count: number; message: string }> => {
-    // Upload in 8MB chunks to stay well below Cloud Run's 32MiB HTTP request body limit
-    const CHUNK_SIZE = 8 * 1024 * 1024;
+    // Upload in 12MB chunks to stay well below Cloud Run's 32MiB HTTP request body limit (supports up to 2GB ZIPs)
+    const CHUNK_SIZE = 12 * 1024 * 1024;
     const totalChunks = Math.max(1, Math.ceil(file.size / CHUNK_SIZE));
     let lastData: { session_id: string; status: string; filename: string; image_count: number; message: string } | null = null;
 

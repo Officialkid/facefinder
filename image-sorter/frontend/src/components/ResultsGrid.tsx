@@ -452,9 +452,9 @@ export default function ResultsGrid({ sessionId, referencePreview, onReset }: Pr
                   <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2 p-4">
                     <button
                       onClick={() => setSelectedMatch(match)}
-                      className="px-3.5 py-2 rounded-lg bg-surface/90 hover:bg-white text-surface text-xs font-mono font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+                      className="px-3.5 py-2 rounded-lg bg-surface-container-high/95 hover:bg-primary text-white text-xs font-mono font-bold border border-white/15 transition-all flex items-center gap-1.5 cursor-pointer"
                     >
-                      <span className="material-symbols-outlined text-[16px] text-primary">compare</span>
+                      <span className="material-symbols-outlined text-[16px] text-secondary">compare</span>
                       <span>Compare</span>
                     </button>
                     <button
