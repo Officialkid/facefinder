@@ -95,6 +95,7 @@ async def start_processing(request: ProcessRequest, http_request: Request):
     session.dataset_source_kind = dataset_source_kind
     session.dataset_email = request.dataset_email.strip() if request.dataset_email else None
     session.dataset_password = request.dataset_password.strip() if request.dataset_password else None
+    session.pre_resolved_image_urls = request.pre_resolved_image_urls or None
     session.requested_model_name = request.model_name
     session.requested_similarity_threshold = request.similarity_threshold
     session.selected_face_index = request.selected_face_index

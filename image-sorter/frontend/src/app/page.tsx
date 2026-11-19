@@ -175,6 +175,7 @@ export default function Home() {
               sessionId={sessionId}
               onComplete={handleComplete}
               onFailed={handleFailed}
+              onReset={handleReset}
             />
           </div>
         )}

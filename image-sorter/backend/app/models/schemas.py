@@ -97,6 +97,7 @@ class ProcessingSession(BaseModel):
     dataset_source_kind: Optional[str] = None
     dataset_email: Optional[str] = None
     dataset_password: Optional[str] = None
+    pre_resolved_image_urls: Optional[List[str]] = None
     requested_model_name: Optional[str] = None
     requested_similarity_threshold: Optional[float] = None
     total_images_scanned: int = 0
@@ -139,6 +140,10 @@ class ProcessRequest(BaseModel):
     dataset_password: Optional[str] = Field(
         default=None,
         description="Optional album password or PIN required to access protected collections",
+    )
+    pre_resolved_image_urls: Optional[List[str]] = Field(
+        default=None,
+        description="Optional pre-resolved public CDN image URLs from frontend gallery resolver",
     )
     selected_face_index: Optional[int] = Field(
         default=None,

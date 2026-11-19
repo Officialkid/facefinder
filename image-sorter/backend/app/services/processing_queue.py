@@ -267,6 +267,7 @@ def _run_recognition(session: ProcessingSession) -> None:
             progress_callback=on_dataset_progress,
             email=session.dataset_email,
             password=session.dataset_password,
+            pre_resolved_image_urls=session.pre_resolved_image_urls,
         )
         session = _set_processing_state(
             session_id,

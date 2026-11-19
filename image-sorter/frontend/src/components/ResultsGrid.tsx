@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ImageSorterAPI, MatchedImage, ResultsResponse } from "@/lib/api";
+import { ImageSorterAPI, MatchedImage, resolveMediaUrl, ResultsResponse } from "@/lib/api";
 
 interface Props {
   sessionId: string;
@@ -413,9 +413,9 @@ export default function ResultsGrid({ sessionId, referencePreview, onReset }: Pr
                 {/* Photo Preview Container */}
                 <div className="relative aspect-[4/3] bg-surface-container-lowest overflow-hidden">
                   <img
-                    src={match.preview_url || ImageSorterAPI.getImageUrl(sessionId, match.relative_path || match.filename)}
+                    src={resolveMediaUrl(match.preview_url) || ImageSorterAPI.getImageUrl(sessionId, match.relative_path || match.filename)}
                     alt={match.filename}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                    className="w-full h-full object-contain bg-black group-hover:scale-105 transition-transform duration-500"
                     loading="lazy"
                   />
 
@@ -600,9 +600,9 @@ export default function ResultsGrid({ sessionId, referencePreview, onReset }: Pr
                 <span className="font-mono text-[11px] uppercase tracking-widest text-on-surface-variant block">Matched Photo ({selectedMatch.filename})</span>
                 <div className="relative aspect-square rounded-xl overflow-hidden border-2 border-secondary/50 bg-surface-container-lowest">
                   <img
-                    src={selectedMatch.preview_url || ImageSorterAPI.getImageUrl(sessionId, selectedMatch.relative_path || selectedMatch.filename)}
+                    src={resolveMediaUrl(selectedMatch.preview_url) || ImageSorterAPI.getImageUrl(sessionId, selectedMatch.relative_path || selectedMatch.filename)}
                     alt="Matched Photo"
-                    className="w-full h-full object-cover"
+                    className="w-full h-full object-contain bg-black"
                   />
                   <div className="absolute inset-3 border border-dashed border-secondary/60 rounded-lg pointer-events-none" />
                 </div>

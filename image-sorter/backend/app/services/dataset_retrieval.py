@@ -876,6 +876,7 @@ def _download_gallery_dataset(
     progress_callback: Optional[Callable[[dict], None]] = None,
     email: Optional[str] = None,
     password: Optional[str] = None,
+    pre_resolved_image_urls: Optional[list[str]] = None,
 ) -> None:
     opener = None
     if email or password or "pixieset.com" in page_url.lower():
@@ -884,15 +885,26 @@ def _download_gallery_dataset(
     cffi_session = _create_cffi_session() if "pixieset.com" in page_url.lower() else None
 
     provider_name = _provider_label(page_url)
-    page_html = _fetch_gallery_page(page_url, opener=opener, cffi_session=cffi_session)
-    image_urls = _extract_gallery_image_urls(
-        page_html,
-        page_url,
-        opener=opener,
-        email=email,
-        password=password,
-        cffi_session=cffi_session,
-    )
+    if pre_resolved_image_urls:
+        safe_urls = []
+        for candidate_url in pre_resolved_image_urls[:MAX_GALLERY_IMAGE_COUNT]:
+            try:
+                _validate_remote_url(candidate_url)
+                safe_urls.append(candidate_url)
+            except Exception:
+                continue
+        image_urls = safe_urls
+        logger.info("Using %d pre-resolved %s image URLs (bypassing upstream WAF)", len(image_urls), provider_name)
+    else:
+        page_html = _fetch_gallery_page(page_url, opener=opener, cffi_session=cffi_session)
+        image_urls = _extract_gallery_image_urls(
+            page_html,
+            page_url,
+            opener=opener,
+            email=email,
+            password=password,
+            cffi_session=cffi_session,
+        )
 
     if not image_urls:
         raise DatasetRetrievalError(
@@ -1032,6 +1044,7 @@ def download_dataset(
     progress_callback: Optional[Callable[[dict], None]] = None,
     email: Optional[str] = None,
     password: Optional[str] = None,
+    pre_resolved_image_urls: Optional[list[str]] = None,
 ) -> str:
     """
     Download a dataset into a session-specific staging folder.
@@ -1103,13 +1116,14 @@ def download_dataset(
                 }
             )
 
-        if source_kind == "gallery_page":
+        if source_kind == "gallery_page" or pre_resolved_image_urls:
             _download_gallery_dataset(
                 resolved_url,
                 staging_dir,
                 progress_callback=progress_callback,
                 email=email,
                 password=password,
+                pre_resolved_image_urls=pre_resolved_image_urls,
             )
         else:
             downloaded_bytes, total_bytes, content_type = _download_to_path(

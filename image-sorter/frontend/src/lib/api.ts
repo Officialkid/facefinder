@@ -21,6 +21,16 @@ export function getBackendBaseUrl(): string {
   return "";
 }
 
+export function resolveMediaUrl(url?: string | null): string {
+  if (!url) return "";
+  if (url.startsWith("http://") || url.startsWith("https://") || url.startsWith("data:")) {
+    return url;
+  }
+  const base = getBackendBaseUrl();
+  const path = url.startsWith("/") ? url : `/${url}`;
+  return `${base}${path}`;
+}
+
 const api = axios.create({
   timeout: 300000,
 });
@@ -369,6 +379,29 @@ export const ImageSorterAPI = {
     dataset_email?: string,
     dataset_password?: string,
   ): Promise<ProcessStartResponse> => {
+    let pre_resolved_image_urls: string[] | undefined = undefined;
+    if (dataset_url.toLowerCase().includes("pixieset.com")) {
+      try {
+        const res = await fetch("/api/resolve-pixieset", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            url: dataset_url,
+            email: dataset_email || undefined,
+            password: dataset_password || undefined,
+          }),
+        });
+        if (res.ok) {
+          const resolved = await res.json();
+          if (Array.isArray(resolved?.image_urls) && resolved.image_urls.length > 0) {
+            pre_resolved_image_urls = resolved.image_urls;
+          }
+        }
+      } catch {
+        // Fall back to direct backend retrieval
+      }
+    }
+
     const { data } = await api.post<ProcessStartResponse>("/process/start", {
       session_id,
       dataset_url,
@@ -377,6 +410,7 @@ export const ImageSorterAPI = {
       selected_face_index,
       dataset_email: dataset_email || undefined,
       dataset_password: dataset_password || undefined,
+      pre_resolved_image_urls,
     });
     return data;
   },

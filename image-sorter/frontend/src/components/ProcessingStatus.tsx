@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ImageSorterAPI, SessionError, StatusResponse } from "@/lib/api";
+import { ImageSorterAPI, resolveMediaUrl, SessionError, StatusResponse } from "@/lib/api";
 
 interface Props {
   sessionId: string;
   onComplete: () => void;
   onFailed: (error: SessionError | null) => void;
+  onReset?: () => void;
 }
 
 const CHECKPOINTS = [
@@ -16,7 +17,7 @@ const CHECKPOINTS = [
   { id: 4, title: "4. Ready to Save", desc: "Review and download." },
 ];
 
-export default function ProcessingStatus({ sessionId, onComplete, onFailed }: Props) {
+export default function ProcessingStatus({ sessionId, onComplete, onFailed, onReset }: Props) {
   const [status, setStatus] = useState<StatusResponse | null>(null);
   const [elapsed, setElapsed] = useState(0);
   const [confirmedMap, setConfirmedMap] = useState<Record<string, boolean>>(() => {
@@ -270,6 +271,17 @@ export default function ProcessingStatus({ sessionId, onComplete, onFailed }: Pr
               {isScanComplete ? "Verify & Export" : "Report Gen"}
             </span>
           </div>
+          {onReset && (
+            <button
+              type="button"
+              onClick={onReset}
+              title="Restart and start a new search"
+              className="ml-2 px-3 py-1.5 rounded-lg bg-surface-container border border-white/10 hover:border-secondary/40 text-on-surface-variant hover:text-white text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer flex-shrink-0"
+            >
+              <span className="material-symbols-outlined text-[15px]">refresh</span>
+              <span>Restart</span>
+            </button>
+          )}
         </div>
 
         {/* Center Scanner Panel */}
@@ -519,9 +531,9 @@ export default function ProcessingStatus({ sessionId, onComplete, onFailed }: Pr
                   >
                     <div className="relative aspect-square w-full bg-black/40 overflow-hidden">
                       <img
-                        src={item.download_url}
+                        src={resolveMediaUrl(item.preview_url || item.download_url)}
                         alt={item.filename}
-                        className="w-full h-full object-cover"
+                        className="w-full h-full object-contain bg-black"
                         loading="lazy"
                       />
                       {/* Confidence Tag */}
@@ -571,7 +583,7 @@ export default function ProcessingStatus({ sessionId, onComplete, onFailed }: Pr
                           <span>✕ No</span>
                         </button>
                         <a
-                          href={item.download_url}
+                          href={resolveMediaUrl(item.download_url)}
                           download={item.filename}
                           target="_blank"
                           rel="noopener noreferrer"
@@ -629,9 +641,9 @@ export default function ProcessingStatus({ sessionId, onComplete, onFailed }: Pr
                         >
                           <div className="relative aspect-square w-full bg-black/40 overflow-hidden">
                             <img
-                              src={item.download_url}
+                              src={resolveMediaUrl(item.preview_url || item.download_url)}
                               alt={item.filename}
-                              className="w-full h-full object-cover"
+                              className="w-full h-full object-contain bg-black"
                               loading="lazy"
                             />
                             <div className="absolute top-2 left-2 px-2 py-0.5 rounded-full bg-black/70 backdrop-blur-md border border-secondary/30 text-[10px] font-mono text-secondary font-bold">
