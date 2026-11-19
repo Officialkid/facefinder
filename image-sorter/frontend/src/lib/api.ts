@@ -354,11 +354,12 @@ export const ImageSorterAPI = {
 
   confirmCandidateMatches: async (
     session_id: string,
-    confirmed_filenames: string[]
+    confirmed_filenames: string[],
+    dismissed_filenames: string[] = []
   ): Promise<{ session_id: string; matched_count: number; candidate_count: number; message: string }> => {
     const { data } = await api.post<{ session_id: string; matched_count: number; candidate_count: number; message: string }>(
       `/results/${session_id}/confirm-matches`,
-      { confirmed_filenames }
+      { confirmed_filenames, dismissed_filenames }
     );
     return data;
   },

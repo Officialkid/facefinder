@@ -180,25 +180,36 @@ from pydantic import BaseModel
 
 
 class ConfirmMatchesRequest(BaseModel):
-    confirmed_filenames: list[str]
+    confirmed_filenames: list[str] = []
+    dismissed_filenames: list[str] = []
 
 
-@router.post("/{session_id}/confirm-matches", summary="Confirm candidate matches")
+@router.post("/{session_id}/confirm-matches", summary="Confirm or dismiss matches")
 async def confirm_candidate_matches(session_id: str, request: ConfirmMatchesRequest):
     session = get_session(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found.")
 
     confirmed_set = set(request.confirmed_filenames)
-    new_matched = list(session.matched_images or [])
+    dismissed_set = set(request.dismissed_filenames)
+    new_matched = [
+        m
+        for m in (session.matched_images or [])
+        if m.filename not in dismissed_set and (m.relative_path or "") not in dismissed_set
+    ]
+    existing_keys = {m.filename for m in new_matched}
     remaining_candidates = []
 
     for cand in (session.candidate_images or []):
-        if cand.filename in confirmed_set or cand.relative_path in confirmed_set:
-            cand.match_tier = "confirmed"
-            cand.confidence_label = "confirmed_by_user"
-            cand.match_reason = "Confirmed by user inspection."
-            new_matched.append(cand)
+        if cand.filename in dismissed_set or (cand.relative_path or "") in dismissed_set:
+            continue
+        if cand.filename in confirmed_set or (cand.relative_path or "") in confirmed_set:
+            if cand.filename not in existing_keys:
+                cand.match_tier = "confirmed"
+                cand.confidence_label = "confirmed_by_user"
+                cand.match_reason = "Confirmed by user inspection."
+                new_matched.append(cand)
+                existing_keys.add(cand.filename)
         else:
             remaining_candidates.append(cand)
 
@@ -213,7 +224,7 @@ async def confirm_candidate_matches(session_id: str, request: ConfirmMatchesRequ
         "session_id": session_id,
         "matched_count": session.matched_count,
         "candidate_count": session.candidate_count,
-        "message": f"Successfully confirmed {len(request.confirmed_filenames)} matches.",
+        "message": f"Successfully updated matches ({len(request.confirmed_filenames)} confirmed, {len(request.dismissed_filenames)} dismissed).",
     }
 
 

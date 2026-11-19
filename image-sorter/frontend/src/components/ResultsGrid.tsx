@@ -55,25 +55,25 @@ export default function ResultsGrid({ sessionId, referencePreview, onReset }: Pr
 
   const verifiedMatches = useMemo(() => {
     if (!results?.matched_images) return [];
-    let list = [...results.matched_images];
+    let list = results.matched_images.filter((m) => confirmedMatches[m.filename] !== false);
     if (sortMode === "similarity") {
       list.sort((a, b) => b.similarity_score - a.similarity_score);
     } else {
       list.sort((a, b) => a.filename.localeCompare(b.filename));
     }
     return list;
-  }, [results?.matched_images, sortMode]);
+  }, [results?.matched_images, sortMode, confirmedMatches]);
 
   const candidateMatches = useMemo(() => {
     if (!results?.candidate_images) return [];
-    let list = [...results.candidate_images];
+    let list = results.candidate_images.filter((c) => confirmedMatches[c.filename] !== false);
     if (sortMode === "similarity") {
       list.sort((a, b) => b.similarity_score - a.similarity_score);
     } else {
       list.sort((a, b) => a.filename.localeCompare(b.filename));
     }
     return list;
-  }, [results?.candidate_images, sortMode]);
+  }, [results?.candidate_images, sortMode, confirmedMatches]);
 
   const activeList = activeTab === "verified" ? verifiedMatches : candidateMatches;
 
@@ -162,6 +162,9 @@ export default function ResultsGrid({ sessionId, referencePreview, onReset }: Pr
 
   const handleDismissMatch = (filename: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
+    ImageSorterAPI.confirmCandidateMatches(sessionId, [], [filename]).catch((err) =>
+      console.error("Failed persisting dismissal:", err)
+    );
     setResults((prev) => {
       if (!prev) return prev;
       const updatedMatched = (prev.matched_images || []).filter((m) => m.filename !== filename);
@@ -391,7 +394,8 @@ export default function ResultsGrid({ sessionId, referencePreview, onReset }: Pr
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
           {activeList.map((match, idx) => {
-            const matchPercent = Math.round((1 - match.similarity_score) * 100);
+            const matchPercent = match.confidence_percent ?? Math.round(match.similarity_score * 100);
+            const cosDist = match.distance !== undefined ? match.distance : Math.max(0, 1 - match.similarity_score);
             const isConfirmed = confirmedMatches[match.filename] ?? (match.match_tier === "confirmed");
             const isCandidate = match.match_tier === "candidate";
 
@@ -470,7 +474,7 @@ export default function ResultsGrid({ sessionId, referencePreview, onReset }: Pr
                       {match.filename}
                     </p>
                     <div className="flex items-center justify-between mt-1 text-[11px] font-mono text-outline">
-                      <span>Cos Dist: {match.similarity_score.toFixed(3)}</span>
+                      <span>Cos Dist: {cosDist.toFixed(3)}</span>
                       <span>{match.source_group || "Event Photo"}</span>
                     </div>
                   </div>

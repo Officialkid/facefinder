@@ -94,10 +94,13 @@ export default function ProcessingStatus({ sessionId, onComplete, onFailed }: Pr
     const confirmedFilenames = Object.entries(confirmedMap)
       .filter(([_, isYes]) => isYes === true)
       .map(([filename]) => filename);
+    const dismissedFilenames = Object.entries(confirmedMap)
+      .filter(([_, isYes]) => isYes === false)
+      .map(([filename]) => filename);
 
-    if (confirmedFilenames.length > 0) {
+    if (confirmedFilenames.length > 0 || dismissedFilenames.length > 0) {
       try {
-        await ImageSorterAPI.confirmCandidateMatches(sessionId, confirmedFilenames);
+        await ImageSorterAPI.confirmCandidateMatches(sessionId, confirmedFilenames, dismissedFilenames);
       } catch (err) {
         console.error("Failed confirming matches:", err);
       }
@@ -165,11 +168,12 @@ export default function ProcessingStatus({ sessionId, onComplete, onFailed }: Pr
       ? Math.round((2 * precisionPct * estimatedRecallPct) / (precisionPct + estimatedRecallPct))
       : null;
 
+  const discoveredOrTotal = status?.total_images_discovered || status?.dataset_total_files || 0;
   const manualEstSecs =
     status?.manual_search_estimated_seconds
       ? Math.round(status.manual_search_estimated_seconds)
-      : status?.total_images_discovered
-      ? Math.round(status.total_images_discovered * 1.8)
+      : discoveredOrTotal > 0
+      ? Math.round(discoveredOrTotal * 1.8)
       : null;
   const timeSaved =
     manualEstSecs && manualEstSecs > displayElapsed
