@@ -327,8 +327,8 @@ export default function ProcessingStatus({ sessionId, onComplete, onFailed }: Pr
             <div
               className={`relative z-10 w-16 h-16 rounded-full bg-surface-container flex items-center justify-center border hud-radar-center ${
                 isScanComplete
-                  ? "border-tertiary text-tertiary shadow-[0_0_20px_rgba(0,165,114,0.5)]"
-                  : "border-secondary text-secondary shadow-[0_0_20px_rgba(76,215,246,0.5)]"
+                  ? "border-tertiary text-tertiary shadow-[0_0_20px_rgba(34,197,94,0.45)]"
+                  : "border-secondary text-secondary shadow-[0_0_20px_rgba(200,245,90,0.35)]"
               }`}
             >
               <span className={`material-symbols-outlined text-[32px] ${isScanComplete ? "" : "animate-pulse"}`}>
@@ -355,7 +355,7 @@ export default function ProcessingStatus({ sessionId, onComplete, onFailed }: Pr
             </div>
             <div className="w-full h-2.5 rounded-full bg-surface-variant overflow-hidden border border-white/5">
               <div
-                className="h-full bg-gradient-to-r from-tertiary via-cyan-400 to-secondary transition-all duration-300 rounded-full shadow-[0_0_12px_rgba(76,215,246,0.6)]"
+                className="h-full bg-gradient-to-r from-primary to-secondary transition-all duration-300 rounded-full shadow-[0_0_12px_rgba(200,245,90,0.4)]"
                 style={{ width: `${progress}%` }}
               />
             </div>
@@ -703,7 +703,7 @@ export default function ProcessingStatus({ sessionId, onComplete, onFailed }: Pr
                 type="button"
                 onClick={handleFinalizeVerification}
                 disabled={isSubmitting}
-                className="w-full sm:w-auto px-6 py-3 rounded-xl bg-gradient-to-r from-tertiary via-cyan-400 to-primary text-black font-bold font-mono text-xs shadow-xl hover:brightness-110 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                className="w-full sm:w-auto px-6 py-3 rounded-xl gradient-button text-white font-bold text-xs shadow-xl hover:brightness-110 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
               >
                 <span className="material-symbols-outlined text-base font-bold">verified</span>
                 <span>{isScanComplete ? `✓ Save & View Verified Photos (${confirmedCount})` : `Finish Verification (${confirmedCount} Confirmed)`}</span>

@@ -192,19 +192,20 @@ export default function Home() {
       </main>
 
       {/* Footer */}
-      <footer className="w-full border-t border-white/10 bg-surface/90 py-8 px-6 sm:px-8 mt-auto z-10">
+      <footer className="w-full border-t border-outline-variant bg-surface py-8 px-6 sm:px-8 mt-auto z-10">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
-          <div className="flex items-center gap-2">
-            <img alt="FaceFinder AI Logo" className="h-6 w-6 rounded-full object-cover" src="/logo.png" />
-            <span className="font-bold text-transparent bg-clip-text bg-gradient-to-r from-[#8b5cf6] to-[#06b6d4]">
-              FaceFinder AI
+          <div className="flex items-center gap-2.5">
+            <img alt="FaceFinder Logo" className="h-6 w-6 rounded-full object-cover ring-1 ring-white/10" src="/logo.png" />
+            <span className="font-display text-xl text-white">FaceFinder</span>
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-secondary/15 text-secondary border border-secondary/30">
+              EventSlot
             </span>
           </div>
           <p className="text-xs text-on-surface-variant text-center">
-            &copy; 2026 FaceFinder AI. All rights reserved. Zero-retention facial recognition architecture.
+            &copy; 2026 FaceFinder · Powered by EventSlot. Private, zero-retention photo discovery.
           </p>
-          <div className="flex flex-wrap items-center justify-center gap-6 text-xs text-on-surface-variant font-mono">
-            <Link href="/docs" className="hover:text-white cursor-pointer transition-colors flex items-center gap-1 text-secondary">
+          <div className="flex flex-wrap items-center justify-center gap-6 text-xs text-on-surface-variant">
+            <Link href="/docs" className="hover:text-white cursor-pointer transition-colors flex items-center gap-1 text-secondary font-medium">
               <span className="material-symbols-outlined text-[14px]">menu_book</span>
               <span>Documentation</span>
             </Link>

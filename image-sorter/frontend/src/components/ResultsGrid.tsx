@@ -484,8 +484,8 @@ export default function ResultsGrid({ sessionId, referencePreview, onReset }: Pr
                     <div
                       className={`h-full rounded-full ${
                         isCandidate
-                          ? "bg-gradient-to-r from-cyan-400 to-blue-500"
-                          : "bg-gradient-to-r from-emerald-400 to-cyan-400"
+                          ? "bg-gradient-to-r from-primary/70 to-secondary/70"
+                          : "bg-gradient-to-r from-primary to-secondary"
                       }`}
                       style={{ width: `${Math.min(100, Math.max(10, matchPercent))}%` }}
                     />

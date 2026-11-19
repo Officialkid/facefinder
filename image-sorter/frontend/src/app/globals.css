@@ -51,15 +51,29 @@ html.dark {
 /* ==========================================================================
    EVENTSLOT DARK THEME (Obsidian Black #0A0A0A + Signature Lime #C8F55A + Emerald #22C55E)
    ========================================================================== */
+html.dark body {
+  background-color: #0A0A0A !important;
+  color: #FFFFFF !important;
+}
+
 html.dark .glass-panel {
-  background: #141414;
-  border: 1px solid #2A2A2A;
+  background: #141414 !important;
+  border: 1px solid #2A2A2A !important;
   box-shadow: 0 8px 30px rgba(0, 0, 0, 0.35);
 }
 
 html.dark nav {
-  background: rgba(10, 10, 10, 0.9);
-  border-bottom: 1px solid #2A2A2A;
+  background: rgba(10, 10, 10, 0.92) !important;
+  border-bottom: 1px solid #2A2A2A !important;
+}
+
+html.dark footer {
+  background-color: #0A0A0A !important;
+  border-top: 1px solid #2A2A2A !important;
+}
+
+html.dark .bg-surface-container-low {
+  background-color: #141414 !important;
 }
 
 .glass-panel-hover:hover {
@@ -119,6 +133,15 @@ html:not(.dark) nav {
   background: rgba(255, 255, 255, 0.94) !important;
   border-bottom: 1px solid #E2E8F0 !important;
   box-shadow: 0 1px 3px 0 rgba(15, 23, 42, 0.04) !important;
+}
+
+html:not(.dark) footer {
+  background-color: #FFFFFF !important;
+  border-top: 1px solid #E2E8F0 !important;
+}
+
+html:not(.dark) .bg-surface-container-low {
+  background-color: #F8FAFC !important;
 }
 
 html:not(.dark) .gradient-text {
