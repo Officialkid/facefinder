@@ -419,25 +419,41 @@ def _extract_pixieset_image_urls(
         except DatasetRetrievalError:
             raise
         except Exception as exc:
-            # Fallback to curl.exe if urllib gets blocked by Cloudflare TLS/browser checks
+            # Fallback to requests or curl if urllib gets blocked by Cloudflare TLS/browser checks
             try:
-                import subprocess
-                curl_cmd = [
-                    "curl.exe", "-s", "-L", req_url,
-                    "-H", f"User-Agent: {REQUEST_HEADERS['User-Agent']}",
-                    "-H", f"Referer: {base_url}",
-                    "-H", "X-Requested-With: XMLHttpRequest",
-                    "-H", "Accept: application/json, text/javascript, */*; q=0.01",
-                ]
-                curl_res = subprocess.run(curl_cmd, capture_output=True, text=True, encoding="utf-8", errors="ignore", timeout=25)
-                if curl_res.returncode == 0 and curl_res.stdout:
-                    data = json.loads(curl_res.stdout)
-                else:
-                    logger.warning("Failed to fetch Pixieset gallery slug '%s': %s", slug, exc)
+                import requests
+                headers = {
+                    "User-Agent": REQUEST_HEADERS["User-Agent"],
+                    "Referer": base_url,
+                    "X-Requested-With": "XMLHttpRequest",
+                    "Accept": "application/json, text/javascript, */*; q=0.01",
+                }
+                resp = requests.get(req_url, headers=headers, timeout=25)
+                if resp.status_code == 200 and resp.text:
+                    data = resp.json()
+            except Exception:
+                pass
+
+            if not data:
+                try:
+                    import subprocess
+                    curl_bin = _get_curl_cmd()
+                    curl_cmd = [
+                        curl_bin, "-s", "-L", req_url,
+                        "-H", f"User-Agent: {REQUEST_HEADERS['User-Agent']}",
+                        "-H", f"Referer: {base_url}",
+                        "-H", "X-Requested-With: XMLHttpRequest",
+                        "-H", "Accept: application/json, text/javascript, */*; q=0.01",
+                    ]
+                    curl_res = subprocess.run(curl_cmd, capture_output=True, text=True, encoding="utf-8", errors="ignore", timeout=25)
+                    if curl_res.returncode == 0 and curl_res.stdout:
+                        data = json.loads(curl_res.stdout)
+                    else:
+                        logger.warning("Failed to fetch Pixieset gallery slug '%s': %s", slug, exc)
+                        continue
+                except Exception as curl_err:
+                    logger.warning("Failed to fetch Pixieset gallery slug '%s': %s", slug, curl_err)
                     continue
-            except Exception as curl_err:
-                logger.warning("Failed to fetch Pixieset gallery slug '%s': %s", slug, curl_err)
-                continue
 
         if data:
             # Check for explicit Pixieset authentication/gate errors
@@ -517,12 +533,31 @@ def _extract_gallery_image_urls(
 
 
 
+def _get_curl_cmd() -> str:
+    """Resolve cross-platform curl binary ('curl' on Linux/Cloud Run, 'curl.exe' or 'curl' on Windows)."""
+    import shutil
+    return shutil.which("curl") or shutil.which("curl.exe") or "curl"
+
+
+def _fetch_gallery_page_with_requests(url: str) -> Optional[str]:
+    """Fallback fetcher using python requests with browser session headers."""
+    try:
+        import requests
+        resp = requests.get(url, headers=REQUEST_HEADERS, timeout=DOWNLOAD_TIMEOUT_SECONDS, allow_redirects=True)
+        if resp.status_code == 200 and resp.text:
+            return resp.text
+    except Exception as exc:
+        logger.debug("requests fallback failed for %s: %s", url, exc)
+    return None
+
+
 def _fetch_gallery_page_with_curl(url: str) -> Optional[str]:
-    """Fallback fetcher using curl.exe to bypass strict Cloudflare browser TLS/header checks."""
+    """Fallback fetcher using curl to bypass strict Cloudflare browser TLS/header checks."""
     import subprocess
+    curl_bin = _get_curl_cmd()
     try:
         cmd = [
-            "curl.exe", "-s", "-L", url,
+            curl_bin, "-s", "-L", url,
             "-H", f"User-Agent: {REQUEST_HEADERS['User-Agent']}",
             "-H", "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
             "-H", "Accept-Language: en-US,en;q=0.9",
@@ -552,6 +587,9 @@ def _fetch_gallery_page(url: str, opener: Optional[urllib.request.OpenerDirector
             return raw_html.decode("utf-8", errors="ignore")
     except HTTPError as e:
         logger.error(f"HTTP error fetching gallery page {url}: {e.code} {e.reason}")
+        req_html = _fetch_gallery_page_with_requests(url)
+        if req_html:
+            return req_html
         curl_html = _fetch_gallery_page_with_curl(url)
         if curl_html:
             return curl_html
@@ -566,6 +604,9 @@ def _fetch_gallery_page(url: str, opener: Optional[urllib.request.OpenerDirector
         ) from e
     except (URLError, TimeoutError) as e:
         logger.error(f"Connection error fetching gallery page {url}: {e}")
+        req_html = _fetch_gallery_page_with_requests(url)
+        if req_html:
+            return req_html
         curl_html = _fetch_gallery_page_with_curl(url)
         if curl_html:
             return curl_html
