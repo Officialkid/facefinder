@@ -154,11 +154,11 @@ export default function DatasetForm({ sessionId, referencePreview, selectedFaceI
 
           {/* Screen Title */}
           <div className="text-center max-w-2xl mx-auto space-y-1">
-            <h2 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
-              Configure Scan Parameters
+            <h2 className="font-display text-3xl sm:text-4xl font-normal text-white tracking-tight">
+              Select Your Event Gallery
             </h2>
             <p className="text-xs sm:text-sm text-on-surface-variant">
-              Define your event album source, recognition tensor model, and cosine sensitivity.
+              Paste your Pixieset or Google Photos link, or upload a ZIP archive to find your photos.
             </p>
           </div>
 
@@ -204,7 +204,7 @@ export default function DatasetForm({ sessionId, referencePreview, selectedFaceI
                   </p>
                   <span className="inline-flex items-center gap-1 text-[10px] font-mono text-tertiary">
                     <span className="w-1.5 h-1.5 rounded-full bg-tertiary animate-pulse" />
-                    Biometrics Locked
+                    Portrait Ready
                   </span>
                 </div>
               </div>
@@ -402,172 +402,66 @@ export default function DatasetForm({ sessionId, referencePreview, selectedFaceI
             </div>
           </div>
 
-          {/* Recognition Engine Architecture Cards */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <label className="font-mono text-xs uppercase tracking-wider text-on-surface-variant font-medium flex items-center gap-2">
-                <span className="material-symbols-outlined text-secondary text-[16px]">psychology</span>
-                <span>Recognition Engine Architecture</span>
-              </label>
-              <span className="font-mono text-[11px] text-outline">Select Tensor Model</span>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
-              {/* ArcFace */}
-              <div
-                onClick={() => setModelName("ArcFace")}
-                className={`cursor-pointer rounded-xl p-4 transition-all duration-200 relative overflow-hidden border flex flex-col justify-between ${
-                  modelName === "ArcFace"
-                    ? "bg-primary-container/20 border-primary shadow-[0_0_20px_rgba(208,188,255,0.2)]"
-                    : "glass-panel bg-surface-container-low/40 border-white/10 hover:border-primary/40 hover:bg-surface-container-high/40"
-                }`}
-              >
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="font-mono text-sm font-bold text-white">ArcFace</span>
-                    <span className="px-2 py-0.5 rounded-full text-[9px] font-mono font-bold bg-primary/20 text-primary border border-primary/40">
-                      Recommended SOTA
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-on-surface-variant leading-relaxed">
-                    512-D Angular Margin Loss (99.83% LFW). Best for 95% of events: weddings, crowded stages &amp; varying poses.
-                  </p>
-                </div>
-                <div className="mt-3 pt-2 border-t border-white/5 flex items-center justify-between text-[10px] font-mono text-outline">
-                  <span>Vectors: 512</span>
-                  <span>ResNet-50</span>
-                </div>
-              </div>
-
-              {/* FaceNet */}
-              <div
-                onClick={() => setModelName("Facenet")}
-                className={`cursor-pointer rounded-xl p-4 transition-all duration-200 relative overflow-hidden border flex flex-col justify-between ${
-                  modelName === "Facenet"
-                    ? "bg-secondary-container/20 border-secondary shadow-[0_0_20px_rgba(76,215,246,0.2)]"
-                    : "glass-panel bg-surface-container-low/40 border-white/10 hover:border-secondary/40 hover:bg-surface-container-high/40"
-                }`}
-              >
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="font-mono text-sm font-bold text-white">FaceNet</span>
-                    <span className="px-2 py-0.5 rounded-full text-[9px] font-mono font-bold bg-secondary/20 text-secondary border border-secondary/40">
-                      Ultra Fast Scan
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-on-surface-variant leading-relaxed">
-                    128-D Triplet Loss. 3x faster inference. Ideal for scanning massive albums with over 1,000+ images.
-                  </p>
-                </div>
-                <div className="mt-3 pt-2 border-t border-white/5 flex items-center justify-between text-[10px] font-mono text-outline">
-                  <span>Vectors: 128</span>
-                  <span>Inception-ResNet</span>
-                </div>
-              </div>
-
-              {/* VGG-Face */}
-              <div
-                onClick={() => setModelName("VGG-Face")}
-                className={`cursor-pointer rounded-xl p-4 transition-all duration-200 relative overflow-hidden border flex flex-col justify-between ${
-                  modelName === "VGG-Face"
-                    ? "bg-tertiary-container/20 border-tertiary shadow-[0_0_20px_rgba(78,222,163,0.2)]"
-                    : "glass-panel bg-surface-container-low/40 border-white/10 hover:border-tertiary/40 hover:bg-surface-container-high/40"
-                }`}
-              >
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="font-mono text-sm font-bold text-white">VGG-Face</span>
-                    <span className="px-2 py-0.5 rounded-full text-[9px] font-mono font-bold bg-tertiary/20 text-tertiary border border-tertiary/40">
-                      Legacy Robust
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-on-surface-variant leading-relaxed">
-                    4096-D Deep CNN. Extremely robust against vintage/older photos, motion blur, and low-light venues.
-                  </p>
-                </div>
-                <div className="mt-3 pt-2 border-t border-white/5 flex items-center justify-between text-[10px] font-mono text-outline">
-                  <span>Vectors: 4096</span>
-                  <span>VGG-16</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Cosine Sensitivity Threshold Slider */}
-          <div className="glass-panel rounded-xl p-5 bg-surface-container-low/60 space-y-4">
+          {/* Clean Match Sensitivity Selector (ArcFace + Ensemble active automatically) */}
+          <div className="glass-panel rounded-xl p-5 bg-surface-container-low/60 space-y-3.5">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-              <label htmlFor="sensitivity" className="font-mono text-xs uppercase tracking-wider text-on-surface-variant font-medium flex items-center gap-2">
+              <label htmlFor="sensitivity" className="text-xs uppercase tracking-wider text-on-surface-variant font-semibold flex items-center gap-2">
                 <span className="material-symbols-outlined text-secondary text-[16px]">tune</span>
-                <span>Cosine Distance Threshold</span>
+                <span>Match Sensitivity</span>
               </label>
-              <div className="flex items-center gap-2 font-mono text-xs">
-                <span className="text-outline">Max Angular Distance:</span>
-                <span className="font-bold text-secondary">{threshold.toFixed(2)}</span>
-                <span className="px-2 py-0.5 rounded bg-surface border border-white/10 text-tertiary text-[11px] font-bold">
-                  {similarityPercent}% Match Cutoff
-                </span>
-              </div>
+              <span className="px-2.5 py-0.5 rounded-full bg-secondary/10 border border-secondary/30 text-secondary text-xs font-semibold">
+                {similarityPercent}% Minimum Match
+              </span>
             </div>
 
-            <input
-              id="sensitivity"
-              type="range"
-              min="0.20"
-              max="0.65"
-              step="0.01"
-              value={threshold}
-              onChange={(e) => setThreshold(parseFloat(e.target.value))}
-              className="w-full h-2 bg-surface-container-lowest rounded-lg appearance-none cursor-pointer accent-secondary"
-            />
-
-            {/* Presets with Guidance */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
+            {/* Clean Presets */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
               <button
                 type="button"
-                onClick={() => setThreshold(0.35)}
-                className={`p-2.5 rounded-lg text-left text-xs font-mono transition-all border ${
-                  threshold === 0.35
+                onClick={() => setThreshold(0.38)}
+                className={`p-3 rounded-xl text-left text-xs transition-all border ${
+                  threshold <= 0.39
                     ? "bg-secondary/15 border-secondary text-white shadow-sm"
-                    : "text-on-surface-variant hover:text-white bg-surface-container border-white/5"
+                    : "text-on-surface-variant hover:text-white bg-surface-container border-white/10"
                 }`}
               >
-                <div className="font-bold flex items-center justify-between">
-                  <span>Strict (0.35)</span>
-                  <span className="text-[10px] text-secondary">65% Cutoff</span>
+                <div className="font-semibold flex items-center justify-between">
+                  <span>Strict</span>
+                  <span className="text-[11px] text-secondary">Best precision</span>
                 </div>
-                <p className="text-[10px] text-outline mt-0.5">Zero false positives. Front-facing only.</p>
+                <p className="text-[11px] text-outline mt-1">Clear, front-facing photos only.</p>
               </button>
 
               <button
                 type="button"
-                onClick={() => setThreshold(0.4)}
-                className={`p-2.5 rounded-lg text-left text-xs font-mono transition-all border ${
-                  threshold === 0.4
+                onClick={() => setThreshold(0.45)}
+                className={`p-3 rounded-xl text-left text-xs transition-all border ${
+                  threshold > 0.39 && threshold <= 0.47
                     ? "bg-secondary/15 border-secondary text-white shadow-sm"
-                    : "text-on-surface-variant hover:text-white bg-surface-container border-white/5"
+                    : "text-on-surface-variant hover:text-white bg-surface-container border-white/10"
                 }`}
               >
-                <div className="font-bold flex items-center justify-between">
-                  <span>Balanced (0.40)</span>
-                  <span className="text-[10px] text-tertiary font-bold">Recommended</span>
+                <div className="font-semibold flex items-center justify-between">
+                  <span>Balanced</span>
+                  <span className="text-[11px] text-tertiary font-bold">Recommended</span>
                 </div>
-                <p className="text-[10px] text-outline mt-0.5">Captures smiles, angled poses &amp; indoor lighting.</p>
+                <p className="text-[11px] text-outline mt-1">Great for smiles, side angles &amp; event lighting.</p>
               </button>
 
               <button
                 type="button"
                 onClick={() => setThreshold(0.5)}
-                className={`p-2.5 rounded-lg text-left text-xs font-mono transition-all border ${
-                  threshold === 0.5
+                className={`p-3 rounded-xl text-left text-xs transition-all border ${
+                  threshold > 0.47
                     ? "bg-secondary/15 border-secondary text-white shadow-sm"
-                    : "text-on-surface-variant hover:text-white bg-surface-container border-white/5"
+                    : "text-on-surface-variant hover:text-white bg-surface-container border-white/10"
                 }`}
               >
-                <div className="font-bold flex items-center justify-between">
-                  <span>Broad (0.50)</span>
-                  <span className="text-[10px] text-outline">50% Cutoff</span>
+                <div className="font-semibold flex items-center justify-between">
+                  <span>Broad</span>
+                  <span className="text-[11px] text-outline">More results</span>
                 </div>
-                <p className="text-[10px] text-outline mt-0.5">Forgiving. Detects hats, sunglasses &amp; crowds.</p>
+                <p className="text-[11px] text-outline mt-1">Includes distant shots, glasses &amp; dim lighting.</p>
               </button>
             </div>
           </div>
@@ -577,26 +471,26 @@ export default function DatasetForm({ sessionId, referencePreview, selectedFaceI
             <button
               type="button"
               onClick={onBack}
-              className="w-full sm:w-auto px-5 py-3 rounded-lg bg-surface border border-white/10 hover:border-secondary/40 text-on-surface-variant hover:text-white font-mono text-xs font-semibold flex items-center justify-center gap-2 transition-all active:scale-95"
+              className="w-full sm:w-auto px-5 py-3 rounded-xl bg-surface border border-white/10 hover:border-secondary/40 text-on-surface-variant hover:text-white text-xs font-semibold flex items-center justify-center gap-2 transition-all active:scale-95"
             >
               <span className="material-symbols-outlined text-[16px]">arrow_back</span>
-              <span>Back / Change Reference Photo</span>
+              <span>Change Reference Photo</span>
             </button>
 
             <button
               type="submit"
               disabled={loading || !datasetUrl.trim()}
-              className="w-full sm:w-auto gradient-button text-white px-8 py-3 rounded-lg font-mono text-xs font-bold shadow-lg shadow-primary/20 hover:shadow-primary/40 active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-40 disabled:pointer-events-none"
+              className="w-full sm:w-auto gradient-button text-white px-8 py-3 rounded-xl text-xs font-bold shadow-lg shadow-primary/20 hover:shadow-primary/40 active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-40 disabled:pointer-events-none"
             >
               {loading ? (
                 <>
                   <div className="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin" />
-                  <span>Connecting to Recognition Worker...</span>
+                  <span>Starting scan...</span>
                 </>
               ) : (
                 <>
-                  <span>Initialize Scan Pipeline</span>
-                  <span className="material-symbols-outlined text-[16px]">rocket_launch</span>
+                  <span>Find My Photos</span>
+                  <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
                 </>
               )}
             </button>
