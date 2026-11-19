@@ -158,7 +158,11 @@ async def upload_dataset_zip(
 
     session_dir = get_session_temp_dir(session_id)
     session_dir.mkdir(parents=True, exist_ok=True)
-    temp_zip_path = session_dir / f"uploaded_dataset_{file.filename}"
+    safe_filename = Path(file.filename).name
+    temp_zip_path = session_dir / f"uploaded_dataset_{safe_filename}"
+
+    staging_dir = session_dir / "dataset_staging"
+    dataset_dir = session_dir / "dataset"
 
     try:
         content = await file.read()
@@ -169,13 +173,16 @@ async def upload_dataset_zip(
             f.write(content)
 
         import zipfile
-        from app.services.dataset_retrieval import _safe_extract_zip, _count_supported_images, _cleanup_path
+        from app.models.schemas import ErrorCode
+        from app.services.dataset_retrieval import (
+            _safe_extract_zip,
+            _count_supported_images,
+            _cleanup_path,
+            DatasetRetrievalError,
+        )
 
         if not zipfile.is_zipfile(temp_zip_path):
             raise HTTPException(status_code=400, detail="Uploaded file is not a valid ZIP archive.")
-
-        staging_dir = session_dir / "dataset_staging"
-        dataset_dir = session_dir / "dataset"
 
         _cleanup_path(staging_dir)
         staging_dir.mkdir(parents=True, exist_ok=True)
@@ -185,7 +192,6 @@ async def upload_dataset_zip(
 
         image_count = _count_supported_images(staging_dir)
         if image_count == 0:
-            _cleanup_path(staging_dir)
             raise HTTPException(status_code=400, detail="The ZIP archive contains no supported image files (JPG, PNG, WEBP, BMP).")
 
         _cleanup_path(dataset_dir)
@@ -198,29 +204,37 @@ async def upload_dataset_zip(
                 target = dataset_dir / item.name
                 _cleanup_path(target)
                 shutil.move(str(item), str(target))
-            _cleanup_path(staging_dir)
 
         # Update session
-        session.dataset_source = f"local_zip://{file.filename}"
-        session.dataset_download_url = f"local_zip://{file.filename}"
+        session.dataset_source = f"local_zip://{safe_filename}"
+        session.dataset_download_url = f"local_zip://{safe_filename}"
         session.dataset_provider = "Local ZIP Upload"
         session.dataset_source_kind = "direct_file"
         session.total_images_discovered = image_count
-        session.stage_message = f"Loaded {image_count} photos from {file.filename}."
+        session.stage_message = f"Loaded {image_count} photos from {safe_filename}."
         from app.services.session_store import update_session
         update_session(session)
 
-        logger.info(f"[{session_id}] Uploaded and extracted {image_count} photos from ZIP {file.filename}")
+        logger.info(f"[{session_id}] Uploaded and extracted {image_count} photos from ZIP {safe_filename}")
         return {
             "session_id": session_id,
             "status": "ready",
-            "filename": file.filename,
+            "filename": safe_filename,
             "image_count": image_count,
-            "message": f"Successfully extracted {image_count} photos from {file.filename}.",
+            "message": f"Successfully extracted {image_count} photos from {safe_filename}.",
         }
     except HTTPException:
         raise
+    except DatasetRetrievalError as exc:
+        from app.models.schemas import ErrorCode
+        logger.warning(f"Unsafe or invalid ZIP upload for session {session_id}: {exc}")
+        status = 413 if getattr(exc, "code", None) == ErrorCode.DATASET_TOO_LARGE else 400
+        raise HTTPException(status_code=status, detail=f"Invalid ZIP archive: {str(exc)}")
     except Exception as e:
         logger.error(f"Failed to process ZIP upload for session {session_id}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to extract ZIP archive: {str(e)}")
+    finally:
+        temp_zip_path.unlink(missing_ok=True)
+        from app.services.dataset_retrieval import _cleanup_path
+        _cleanup_path(staging_dir)
 

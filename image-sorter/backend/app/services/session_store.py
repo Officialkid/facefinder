@@ -25,13 +25,18 @@ _lock = threading.Lock()
 
 
 def _connect() -> sqlite3.Connection:
-    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+    conn = sqlite3.connect(DB_PATH, timeout=30.0, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     return conn
 
 
 def _initialize() -> None:
     with _connect() as conn:
+        try:
+            conn.execute("PRAGMA journal_mode=WAL;")
+            conn.execute("PRAGMA synchronous=NORMAL;")
+        except Exception as _pragma_err:
+            logger.debug("Failed setting SQLite PRAGMA journal_mode: %s", _pragma_err)
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS sessions (

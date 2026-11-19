@@ -2,11 +2,13 @@
 
 import html
 import http.cookiejar
+import ipaddress
 import logging
 import os
 from pathlib import Path
 import re
 import shutil
+import socket
 import threading
 import time
 from typing import Callable, Optional
@@ -104,6 +106,42 @@ def _resolve_url(url: str) -> tuple[str, str]:
     return url, source_kind
 
 
+def _is_forbidden_ip(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
+    if ip.version == 6 and ip.ipv4_mapped:
+        ip = ip.ipv4_mapped
+    return (
+        ip.is_private
+        or ip.is_loopback
+        or ip.is_link_local
+        or ip.is_reserved
+        or ip.is_multicast
+        or ip.is_unspecified
+    )
+
+
+def _is_forbidden_host(hostname: str) -> bool:
+    if not hostname:
+        return True
+    lower = hostname.lower().strip().strip("[]")
+    if lower in ("localhost", "metadata.google.internal") or lower.endswith(".local") or lower.endswith(".internal"):
+        return True
+    try:
+        ip = ipaddress.ip_address(int(lower) if lower.isdigit() else lower)
+        return _is_forbidden_ip(ip)
+    except ValueError:
+        pass
+    try:
+        addr_infos = socket.getaddrinfo(lower, None)
+        for _, _, _, _, sockaddr in addr_infos:
+            ip_str = sockaddr[0]
+            ip = ipaddress.ip_address(ip_str)
+            if _is_forbidden_ip(ip):
+                return True
+    except Exception:
+        pass
+    return False
+
+
 def _validate_remote_url(url: str) -> None:
     parsed = urlparse(url)
     if parsed.scheme not in SUPPORTED_REMOTE_HOSTS or not parsed.netloc:
@@ -111,6 +149,31 @@ def _validate_remote_url(url: str) -> None:
             ErrorCode.DATASET_INVALID,
             "Please provide a valid public dataset URL.",
         )
+    hostname = parsed.hostname
+    if not hostname or _is_forbidden_host(hostname):
+        raise DatasetRetrievalError(
+            ErrorCode.DATASET_INVALID,
+            "Access to local or private network addresses is forbidden.",
+        )
+
+
+class SafeRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Prevents SSRF attacks through HTTP 301/302/307 redirects to private/cloud metadata IPs."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        _validate_remote_url(newurl)
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+def _get_safe_opener(*extra_handlers: urllib.request.BaseHandler) -> urllib.request.OpenerDirector:
+    return urllib.request.build_opener(SafeRedirectHandler(), *extra_handlers)
+
+
+# Install SafeRedirectHandler as default opener to prevent SSRF across all urllib calls
+try:
+    urllib.request.install_opener(_get_safe_opener())
+except Exception as _opener_exc:
+    logger.debug("Failed to install default safe opener: %s", _opener_exc)
 
 
 def _count_supported_images(folder: Path) -> int:
@@ -241,7 +304,7 @@ def _extract_pixieset_image_urls(
         except Exception:
             pass
 
-    http_client = opener or urllib.request.build_opener()
+    http_client = opener or _get_safe_opener()
 
     # Pre-authenticate visitor email if provided
     if email:
@@ -688,7 +751,7 @@ def _download_gallery_dataset(
     opener = None
     if email or password:
         cookie_jar = http.cookiejar.CookieJar()
-        opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cookie_jar))
+        opener = _get_safe_opener(urllib.request.HTTPCookieProcessor(cookie_jar))
 
     provider_name = _provider_label(page_url)
     page_html = _fetch_gallery_page(page_url, opener=opener)

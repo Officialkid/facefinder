@@ -301,57 +301,70 @@ def extract_embedding(
     DeepFace = _get_deepface()
     cv2 = _get_cv2()
 
-    # If target_face_index was chosen, extract that specific face crop
+    # If target_face_index was chosen, extract that specific face crop.
+    # NEVER fall back silently to dominant face if targeted extraction fails,
+    # as that would compare against the wrong person.
     if target_face_index is not None:
         try:
             faces = detect_reference_faces(image_path)
-            if faces and 0 <= target_face_index < len(faces):
-                target = faces[target_face_index]
-                box = target["bounding_box"]
-                # Must use preprocess_image so dimensions and EXIF orientation match bounding_box exactly
-                img = preprocess_image(image_path)
-                if img is None:
-                    img = cv2.imread(image_path)
-                if img is not None:
-                    h_img, w_img = img.shape[:2]
-                    pad_x = int(box["w"] * 0.20)
-                    pad_y = int(box["h"] * 0.20)
-                    x1 = max(0, box["x"] - pad_x)
-                    y1 = max(0, box["y"] - pad_y)
-                    x2 = min(w_img, box["x"] + box["w"] + pad_x)
-                    y2 = min(h_img, box["y"] + box["h"] + pad_y)
-                    face_crop = img[y1:y2, x1:x2]
-                    if face_crop.size > 0:
-                        reps = None
-                        for det in ["ssd", "opencv"]:
-                            try:
-                                with _inference_lock:
-                                    reps = DeepFace.represent(
-                                        img_path=face_crop,
-                                        model_name=model_name,
-                                        enforce_detection=True,
-                                        detector_backend=det,
-                                    )
-                                if reps:
-                                    break
-                            except Exception:
-                                continue
-                        if not reps:
+            if not faces or target_face_index < 0 or target_face_index >= len(faces):
+                logger.error(
+                    "Target face index %d invalid for detected faces count %d",
+                    target_face_index,
+                    len(faces) if faces else 0,
+                )
+                return None
+
+            target = faces[target_face_index]
+            box = target["bounding_box"]
+            # Must use preprocess_image so dimensions and EXIF orientation match bounding_box exactly
+            img = preprocess_image(image_path)
+            if img is None:
+                img = cv2.imread(image_path)
+            if img is not None:
+                h_img, w_img = img.shape[:2]
+                pad_x = int(box["w"] * 0.20)
+                pad_y = int(box["h"] * 0.20)
+                x1 = max(0, box["x"] - pad_x)
+                y1 = max(0, box["y"] - pad_y)
+                x2 = min(w_img, box["x"] + box["w"] + pad_x)
+                y2 = min(h_img, box["y"] + box["h"] + pad_y)
+                face_crop = img[y1:y2, x1:x2]
+                if face_crop.size > 0:
+                    reps = None
+                    for det in ["ssd", "opencv"]:
+                        try:
                             with _inference_lock:
                                 reps = DeepFace.represent(
                                     img_path=face_crop,
                                     model_name=model_name,
-                                    enforce_detection=False,
+                                    enforce_detection=True,
+                                    detector_backend=det,
                                 )
-                        if reps:
-                            logger.info(
-                                "Extracted aligned embedding for targeted face %d (%s-D)",
-                                target_face_index,
-                                len(reps[0]["embedding"]),
+                            if reps:
+                                break
+                        except Exception:
+                            continue
+                    if not reps:
+                        with _inference_lock:
+                            reps = DeepFace.represent(
+                                img_path=face_crop,
+                                model_name=model_name,
+                                enforce_detection=False,
                             )
-                            return np.array(reps[0]["embedding"], dtype=np.float32)
+                    if reps:
+                        logger.info(
+                            "Extracted aligned embedding for targeted face %d (%s-D)",
+                            target_face_index,
+                            len(reps[0]["embedding"]),
+                        )
+                        return np.array(reps[0]["embedding"], dtype=np.float32)
+
+            logger.error("Failed to extract embedding from targeted face %d crop.", target_face_index)
+            return None
         except Exception as exc:
-            logger.warning("Targeted face extraction failed: %s. Falling back to dominant face.", exc)
+            logger.error("Targeted face extraction failed: %s. Aborting fallback.", exc)
+            return None
 
     variants = _generate_detection_variants(image_path)
     if not variants:

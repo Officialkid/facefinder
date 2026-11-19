@@ -50,6 +50,18 @@ async def start_processing(request: ProcessRequest, http_request: Request):
             detail="Reference image not found. Upload an image first via /api/upload/reference",
         )
 
+    if request.selected_face_index is not None:
+        if not session.detected_reference_faces:
+            raise HTTPException(
+                status_code=400,
+                detail="Cannot select face index: no faces were detected in the reference photo.",
+            )
+        if request.selected_face_index < 0 or request.selected_face_index >= len(session.detected_reference_faces):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Selected face index {request.selected_face_index} is out of range (0 to {len(session.detected_reference_faces) - 1}).",
+            )
+
     validate_dataset_url_input(request.dataset_url or "")
     dataset_provider, dataset_source_kind = infer_dataset_source_metadata(request.dataset_url or "")
 

@@ -67,16 +67,9 @@ def validate_dataset_url_input(url: str) -> None:
         raise HTTPException(status_code=400, detail="dataset_url must be a valid public http(s) URL.")
 
     hostname = (parsed.hostname or "").lower()
-    if hostname in BLOCKED_HOSTNAMES:
-        raise HTTPException(status_code=400, detail="Local or loopback dataset URLs are not allowed.")
-
-    try:
-        ip = ipaddress.ip_address(hostname)
-    except ValueError:
-        ip = None
-
-    if ip and (ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_multicast or ip.is_reserved):
-        raise HTTPException(status_code=400, detail="Private network dataset URLs are not allowed.")
+    from app.services.dataset_retrieval import _is_forbidden_host
+    if not hostname or _is_forbidden_host(hostname):
+        raise HTTPException(status_code=400, detail="Local, private, or loopback dataset URLs are not allowed.")
 
     suffix = Path(parsed.path).suffix.lower()
     if suffix and suffix not in {".zip", ".jpg", ".jpeg", ".png", ".bmp", ".webp", ".tiff"}:

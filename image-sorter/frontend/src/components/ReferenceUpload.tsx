@@ -56,6 +56,10 @@ export default function ReferenceUpload({ onSuccess }: Props) {
 
     try {
       const result = await ImageSorterAPI.uploadReference(selectedFile);
+      if (result.detected_faces && result.detected_faces.length === 0) {
+        setError("No face detected in this photo. Please upload a clear, front-facing portrait.");
+        return;
+      }
       if (result.detected_faces && result.detected_faces.length > 1) {
         setDetectedFaces(result.detected_faces);
         setSelectedFaceIdx(0);

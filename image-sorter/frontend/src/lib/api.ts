@@ -325,7 +325,7 @@ export const ImageSorterAPI = {
       formData,
       {
         headers: { "Content-Type": "multipart/form-data" },
-        timeout: 120000,
+        timeout: 300000,
       }
     );
     return data;

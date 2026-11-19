@@ -1,5 +1,6 @@
 import importlib
 import asyncio
+import io
 import json
 import os
 from pathlib import Path
@@ -1085,6 +1086,168 @@ class SessionAndStatusTests(unittest.TestCase):
             names = zf.namelist()
             self.assertEqual(len(names), 1)
             self.assertIn("Rank_01_photo1.jpg", names)
+
+    def test_validate_remote_url_blocks_ssrf_and_private_ips(self):
+        from app.services.dataset_retrieval import _validate_remote_url, DatasetRetrievalError
+
+        blocked_urls = [
+            "http://127.0.0.1:8000/album.zip",
+            "http://localhost:3000/album.zip",
+            "http://169.254.169.254/computeMetadata/v1/",
+            "http://10.0.0.5/test.zip",
+            "http://192.168.1.1/images.zip",
+            "http://172.16.0.1/photos.zip",
+            "http://[::1]:8000/album.zip",
+            "http://[::ffff:169.254.169.254]/meta",
+            "http://2130706433/album.zip",
+        ]
+        for url in blocked_urls:
+            with self.subTest(url=url):
+                with self.assertRaises(DatasetRetrievalError) as ctx:
+                    _validate_remote_url(url)
+                self.assertIn("forbidden", str(ctx.exception).lower())
+
+        # Test SafeRedirectHandler blocks SSRF via HTTP 302 redirects
+        from app.services.dataset_retrieval import SafeRedirectHandler
+        import urllib.request
+        handler = SafeRedirectHandler()
+        dummy_req = urllib.request.Request("https://safe-gallery.com/album")
+        with self.assertRaises(DatasetRetrievalError) as ctx:
+            handler.redirect_request(dummy_req, None, 302, "Found", {}, "http://169.254.169.254/meta")
+        self.assertIn("forbidden", str(ctx.exception).lower())
+
+    def test_target_face_index_no_silent_dominant_fallback(self):
+        from app.services.face_recognition import extract_embedding
+        # If target_face_index is out of range or invalid, it must return None
+        # and NOT fall back to dominant face extraction
+        dummy_img_path = str(Path(self.dataset_retrieval.get_session_temp_dir("dummy")) / "test.png")
+        Path(dummy_img_path).parent.mkdir(parents=True, exist_ok=True)
+        Path(dummy_img_path).write_bytes(self.valid_png_bytes())
+
+        with mock.patch("app.services.face_recognition.detect_reference_faces", return_value=[]):
+            result = extract_embedding(dummy_img_path, target_face_index=99)
+            self.assertIsNone(result, "Should return None and not fall back to dominant face")
+
+    def test_upload_dataset_zip_endpoint_and_path_sanitization(self):
+        # Create session first
+        session_id = "test-zip-upload-session"
+        session = self.schemas.ProcessingSession(
+            session_id=session_id,
+            status=self.schemas.SessionStatus.PENDING,
+        )
+        self.session_store.create_session(session)
+
+        # Create valid zip in-memory with one image
+        zip_buf = io.BytesIO()
+        with zipfile.ZipFile(zip_buf, "w") as zf:
+            zf.writestr("test_photo.jpg", self.valid_jpeg_bytes())
+        zip_buf.seek(0)
+
+        # Upload with path traversal attempt in filename
+        response = self.client.post(
+            f"/api/upload/dataset-zip?session_id={session_id}",
+            files={"file": ("../../malicious_album.zip", zip_buf.getvalue(), "application/zip")},
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["session_id"], session_id)
+        self.assertEqual(data["image_count"], 1)
+
+        # Verify response returns sanitized filename
+        self.assertEqual(data["filename"], "malicious_album.zip")
+        # Verify extracted file exists in session's dataset dir, not outside
+        session_dir = Path(self.dataset_retrieval.get_session_temp_dir(session_id))
+        self.assertTrue((session_dir / "dataset" / "test_photo.jpg").exists())
+
+    def test_upload_dataset_zip_rejects_zip_slip_with_400(self):
+        session_id = "test-zip-slip-session"
+        session = self.schemas.ProcessingSession(
+            session_id=session_id,
+            status=self.schemas.SessionStatus.PENDING,
+        )
+        self.session_store.create_session(session)
+
+        # Create zip with zip slip path traversal inside archive
+        zip_buf = io.BytesIO()
+        with zipfile.ZipFile(zip_buf, "w") as zf:
+            zf.writestr("../../evil.jpg", self.valid_jpeg_bytes())
+        zip_buf.seek(0)
+
+        response = self.client.post(
+            f"/api/upload/dataset-zip?session_id={session_id}",
+            files={"file": ("slip.zip", zip_buf.getvalue(), "application/zip")},
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("Invalid ZIP archive", response.json()["detail"])
+
+    def test_security_validate_dataset_url_blocks_decimal_and_mapped_ips(self):
+        from app.services.security import validate_dataset_url_input
+        from fastapi import HTTPException
+
+        unsafe_urls = [
+            "http://2130706433/album.zip",
+            "http://[::ffff:127.0.0.1]/album.zip",
+            "http://metadata.google.internal/computeMetadata/v1/",
+            "http://127.0.0.1:8000/photos.zip",
+            "http://[::1]:8000/photos.zip",
+        ]
+        for url in unsafe_urls:
+            with self.subTest(url=url):
+                with self.assertRaises(HTTPException) as ctx:
+                    validate_dataset_url_input(url)
+                self.assertEqual(ctx.exception.status_code, 400)
+                self.assertIn("not allowed", ctx.exception.detail.lower())
+
+    def test_process_start_rejects_out_of_bounds_face_index(self):
+        session_id = "test-face-idx-bounds"
+        # Session with 2 detected faces
+        detected = [
+            self.schemas.FaceDetectionItem(face_index=0, confidence=0.98, bounding_box={"x": 10, "y": 10, "w": 50, "h": 50}, thumbnail_base64="thumb0"),
+            self.schemas.FaceDetectionItem(face_index=1, confidence=0.95, bounding_box={"x": 70, "y": 10, "w": 50, "h": 50}, thumbnail_base64="thumb1"),
+        ]
+        dummy_ref = Path(self.dataset_retrieval.get_session_temp_dir(session_id)) / "reference.jpg"
+        dummy_ref.parent.mkdir(parents=True, exist_ok=True)
+        dummy_ref.write_bytes(self.valid_jpeg_bytes())
+
+        session = self.schemas.ProcessingSession(
+            session_id=session_id,
+            status=self.schemas.SessionStatus.PENDING,
+            reference_image_path=str(dummy_ref),
+            detected_reference_faces=detected,
+        )
+        self.session_store.create_session(session)
+
+        # Test index 5 (out of bounds)
+        res = self.client.post(
+            "/api/process/start",
+            json={
+                "session_id": session_id,
+                "dataset_url": "local_zip://test.zip",
+                "selected_face_index": 5,
+            },
+        )
+        self.assertEqual(res.status_code, 400)
+        self.assertIn("out of range", res.json()["detail"])
+
+        # Test negative index
+        res = self.client.post(
+            "/api/process/start",
+            json={
+                "session_id": session_id,
+                "dataset_url": "local_zip://test.zip",
+                "selected_face_index": -1,
+            },
+        )
+        self.assertEqual(res.status_code, 400)
+        self.assertIn("out of range", res.json()["detail"])
+
+    def test_session_store_wal_mode_and_timeout(self):
+        import sqlite3
+        conn = self.session_store._connect()
+        cur = conn.cursor()
+        mode = cur.execute("PRAGMA journal_mode;").fetchone()[0]
+        self.assertEqual(mode.lower(), "wal")
+        conn.close()
 
 
 if __name__ == "__main__":

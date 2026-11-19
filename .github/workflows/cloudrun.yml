@@ -28,11 +28,10 @@ jobs:
         id: check_auth
         run: |
           if [ -z "${{ env.GCP_CREDENTIALS_JSON }}" ]; then
-            echo "::warning::GCP_CREDENTIALS_JSON secret is not set in GitHub repository settings. Skipping Cloud Run deploy step."
-            echo "has_auth=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "has_auth=true" >> "$GITHUB_OUTPUT"
+            echo "::error::GCP_CREDENTIALS_JSON (or GCP_SA_KEY) secret is not set in GitHub repository settings. Cloud Run deployment cannot proceed."
+            exit 1
           fi
+          echo "has_auth=true" >> "$GITHUB_OUTPUT"
 
       - name: Authenticate to Google Cloud
         if: steps.check_auth.outputs.has_auth == 'true'
@@ -72,4 +71,4 @@ jobs:
             --cpu 2 \
             --timeout 1800 \
             --min-instances 0 \
-            --max-instances 5
+            --max-instances 1
